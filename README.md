@@ -116,5 +116,6 @@ Playwright проверяет пользовательский путь, реа�
 - [Архитектурные решения](docs/ADR.md)
 - [План развития и мобильных клиентов](docs/ROADMAP.md)
 - [Контракты API](docs/API.md)
+- [Результаты проверок SQLite, PostgreSQL и Docker](docs/VERIFICATION.md)
 
 Начальная схема PostgreSQL: `migrations/versions/0001_initial.py`; последующие изменения — новые миграции. Секреты генерируются локально и никогда не хранятся в Git.
