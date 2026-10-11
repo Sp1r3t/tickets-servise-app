@@ -60,7 +60,8 @@ def create_app(settings=None):
 
     def ensure(conn, table, values):
         stmt = (sqlite_insert if rt.sqlite else pg_insert)(table).values(**values).on_conflict_do_nothing()
-        return conn.execute(stmt).rowcount == 1
+        # psycopg may report rowcount=-1 for this DML shape. RETURNING is authoritative.
+        return conn.execute(stmt.returning(*table.primary_key.columns)).first() is not None
 
     @app.post("/internal/events", dependencies=[Depends(rt.internal)])
     def initialize(body: Initialize):
