@@ -1,0 +1,174 @@
+name: ticketflow
+
+x-service: &service
+  build: .
+  restart: unless-stopped
+  networks: [backend]
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+    interval: 10s
+    timeout: 5s
+    retries: 10
+  environment: &environment
+    JWT_SECRET: ${JWT_SECRET:?Run scripts/init_env.py}
+    INTERNAL_SECRET: ${INTERNAL_SECRET:?Run scripts/init_env.py}
+    ENVIRONMENT: development
+    DEMO_PAYMENTS: "true"
+    COOKIE_SECURE: "false"
+    HOLD_SECONDS: ${HOLD_SECONDS:-600}
+    IDENTITY_URL: http://identity:8000
+    CATALOG_URL: http://catalog:8000
+    INVENTORY_URL: http://inventory:8000
+    ORDERS_URL: http://orders:8000
+    PAYMENTS_URL: http://payments:8000
+
+services:
+  identity:
+    <<: *service
+    environment:
+      <<: *environment
+      SERVICE_NAME: identity
+      DATABASE_URL: postgresql+psycopg://identity:${IDENTITY_DB_PASSWORD:?Run scripts/init_env.py}@identity-db:5432/identity
+    depends_on:
+      identity-db:
+        condition: service_healthy
+  identity-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    networks: [backend]
+    environment:
+      POSTGRES_DB: identity
+      POSTGRES_USER: identity
+      POSTGRES_PASSWORD: ${IDENTITY_DB_PASSWORD:?Run scripts/init_env.py}
+    volumes: [identity-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U identity -d identity"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  catalog:
+    <<: *service
+    environment:
+      <<: *environment
+      SERVICE_NAME: catalog
+      DATABASE_URL: postgresql+psycopg://catalog:${CATALOG_DB_PASSWORD:?Run scripts/init_env.py}@catalog-db:5432/catalog
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+  catalog-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    networks: [backend]
+    environment:
+      POSTGRES_DB: catalog
+      POSTGRES_USER: catalog
+      POSTGRES_PASSWORD: ${CATALOG_DB_PASSWORD:?Run scripts/init_env.py}
+    volumes: [catalog-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catalog -d catalog"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  inventory:
+    <<: *service
+    environment:
+      <<: *environment
+      SERVICE_NAME: inventory
+      DATABASE_URL: postgresql+psycopg://inventory:${INVENTORY_DB_PASSWORD:?Run scripts/init_env.py}@inventory-db:5432/inventory
+    depends_on:
+      inventory-db:
+        condition: service_healthy
+  inventory-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    networks: [backend]
+    environment:
+      POSTGRES_DB: inventory
+      POSTGRES_USER: inventory
+      POSTGRES_PASSWORD: ${INVENTORY_DB_PASSWORD:?Run scripts/init_env.py}
+    volumes: [inventory-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventory -d inventory"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  orders:
+    <<: *service
+    environment:
+      <<: *environment
+      SERVICE_NAME: orders
+      DATABASE_URL: postgresql+psycopg://orders:${ORDERS_DB_PASSWORD:?Run scripts/init_env.py}@orders-db:5432/orders
+    depends_on:
+      orders-db:
+        condition: service_healthy
+  orders-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    networks: [backend]
+    environment:
+      POSTGRES_DB: orders
+      POSTGRES_USER: orders
+      POSTGRES_PASSWORD: ${ORDERS_DB_PASSWORD:?Run scripts/init_env.py}
+    volumes: [orders-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orders -d orders"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  payments:
+    <<: *service
+    environment:
+      <<: *environment
+      SERVICE_NAME: payments
+      DATABASE_URL: postgresql+psycopg://payments:${PAYMENTS_DB_PASSWORD:?Run scripts/init_env.py}@payments-db:5432/payments
+    depends_on:
+      payments-db:
+        condition: service_healthy
+  payments-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    networks: [backend]
+    environment:
+      POSTGRES_DB: payments
+      POSTGRES_USER: payments
+      POSTGRES_PASSWORD: ${PAYMENTS_DB_PASSWORD:?Run scripts/init_env.py}
+    volumes: [payments-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payments -d payments"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  gateway:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    networks: [backend, edge]
+    volumes: [./infra/nginx.conf:/etc/nginx/nginx.conf:ro]
+    depends_on:
+      identity:
+        condition: service_healthy
+      catalog:
+        condition: service_healthy
+      inventory:
+        condition: service_healthy
+      orders:
+        condition: service_healthy
+      payments:
+        condition: service_healthy
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    networks: [edge]
+    ports: ["127.0.0.1:8080:80"]
+    depends_on: [gateway]
+
+networks:
+  backend:
+    internal: true
+  edge:
+
+volumes:
+  identity-data:
+  catalog-data:
+  inventory-data:
+  orders-data:
+  payments-data:
