@@ -454,6 +454,14 @@ export function ObjectTools({
     </>
   )
 }
+function variantPreview(object: HallObject, id: NonNullable<HallObject['variant']>): HallObject {
+  const o = withVariant(object, id),
+    scale = Math.min(90 / o.width, 64 / o.height),
+    width = o.width * scale,
+    height = o.height * scale
+  return { ...o, x: (100 - width) / 2, y: (74 - height) / 2, width, height, label: '', rotation: 0 }
+}
+
 export function ObjectInspector({
   object,
   patch,
@@ -485,18 +493,7 @@ export function ObjectInspector({
                 onClick={() => patch(withVariant(object, v.id))}
               >
                 <svg viewBox="0 0 100 74">
-                  <ShapeGlyph
-                    shape={{
-                      ...withVariant(object, v.id),
-                      x: 5,
-                      y: 5,
-                      width: 90,
-                      height: 64,
-                      label: '',
-                      rotation: 0,
-                    }}
-                    color={object.color}
-                  />
+                  <ShapeGlyph shape={variantPreview(object, v.id)} color={object.color} />
                 </svg>
                 <span>{v.name}</span>
               </button>

@@ -158,5 +158,14 @@ export function withForm<T extends Shape>(s: T, id: string): T {
 }
 export function withVariant(s: HallObject, id: NonNullable<HallObject['variant']>): HallObject {
   const v = variants[s.kind]?.find((v) => v.id === id)
-  return { ...(v ? withForm(s, v.form) : s), variant: id }
+  const next = { ...(v ? withForm(s, v.form) : s), variant: id }
+  if (
+    s.variant !== id &&
+    (s.kind === 'table' || s.kind === 'column' || (s.kind === 'stairs' && id === 'spiral'))
+  ) {
+    const size = Math.min(s.width, s.height)
+    next.width = s.kind === 'table' && id === 'long' ? size * 1.8 : size
+    next.height = size
+  }
+  return next
 }
