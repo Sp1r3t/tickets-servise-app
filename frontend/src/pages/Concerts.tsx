@@ -13,7 +13,7 @@ import { Link } from 'react-router-dom'
 import { api, post } from '../api'
 import { Loading, Notice } from '../components/ui'
 import { errorText, labels } from '../constants'
-import { date, type Concert, type Hall } from '../types'
+import { date, money, type Concert, type Hall } from '../types'
 
 export function Concerts() {
   const [concerts, setConcerts] = useState<Concert[]>([]),
@@ -21,12 +21,44 @@ export function Concerts() {
     [message, setMessage] = useState(''),
     [ready, setReady] = useState(false),
     [busy, setBusy] = useState('')
+  const [search, setSearch] = useState(''),
+    [status, setStatus] = useState('')
+  const [summary, setSummary] = useState<{ sold: number; revenue: number; pending: number } | null>(
+    null,
+  )
+  const filtered = concerts.filter(
+    (c) =>
+      (!status || c.status === status) &&
+      `${c.details.title} ${c.details.venue}`
+        .toLocaleLowerCase('ru')
+        .includes(search.toLocaleLowerCase('ru')),
+  )
   const [copied, setCopied] = useState('')
   function reload() {
     return Promise.all([api<Concert[]>('/organizer/events'), api<Hall[]>('/halls')])
       .then(([c, h]) => {
         setConcerts(c)
         setHalls(h)
+        return Promise.all(
+          c
+            .filter((x) => x.status === 'published')
+            .map((x) =>
+              api<{ sold: number; revenue: number; pending: number }>(
+                `/organizer/events/${x.id}/sales`,
+              ),
+            ),
+        ).then((rows) =>
+          setSummary(
+            rows.reduce(
+              (n, s) => ({
+                sold: n.sold + s.sold,
+                revenue: n.revenue + s.revenue,
+                pending: n.pending + s.pending,
+              }),
+              { sold: 0, revenue: 0, pending: 0 },
+            ),
+          ),
+        )
       })
       .catch((e) => setMessage(errorText(e)))
       .finally(() => setReady(true))
@@ -93,6 +125,38 @@ export function Concerts() {
           <strong>{halls.length}</strong>
         </div>
       </div>
+      <div className="organizer-summary">
+        <div>
+          <span className="eyebrow">РЕЗУЛЬТАТЫ ПРОДАЖ</span>
+          <h2>{summary ? money(summary.revenue) : '…'}</h2>
+          <p className="small muted">
+            Тестовая выручка · {summary?.sold ?? '…'} билетов продано · {summary?.pending ?? '…'} в
+            брони
+          </p>
+        </div>
+        <Link className="button secondary" to="/organizer/sales">
+          Подробная аналитика
+          <ArrowRight size={16} />
+        </Link>
+      </div>
+      <div className="organizer-shortcuts">
+        <Link to="/organizer/halls">
+          <Armchair size={21} />
+          <div>
+            <strong>Библиотека залов</strong>
+            <p>Своё пространство или готовая схема сообщества</p>
+          </div>
+          <ArrowRight size={18} />
+        </Link>
+        <Link to="/organizer/check-in">
+          <Check size={21} />
+          <div>
+            <strong>Встречайте зрителей</strong>
+            <p>Однократная проверка QR на входе</p>
+          </div>
+          <ArrowRight size={18} />
+        </Link>
+      </div>
       <Notice message={message} />
       {!ready ? (
         <Loading />
@@ -130,7 +194,29 @@ export function Concerts() {
             <h3>Все концерты</h3>
             <span className="small muted">Схема фиксируется при публикации</span>
           </div>
-          {concerts.map((c) => (
+          <div className="dashboard-filters">
+            <label>
+              <span className="sr-only">Поиск своих концертов</span>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Концерт или площадка"
+              />
+            </label>
+            <label>
+              <span className="sr-only">Статус концерта</span>
+              <select value={status} onChange={(e) => setStatus(e.target.value)}>
+                <option value="">Все статусы</option>
+                <option value="draft">Черновики</option>
+                <option value="publishing">Публикуются</option>
+                <option value="published">В продаже</option>
+              </select>
+            </label>
+          </div>
+          {!filtered.length && (
+            <div className="empty muted">По заданным фильтрам концертов нет.</div>
+          )}
+          {filtered.map((c) => (
             <div className="event-row" key={c.id}>
               <div className="event-icon">
                 <Music2 size={23} />

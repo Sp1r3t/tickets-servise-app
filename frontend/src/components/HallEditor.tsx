@@ -15,7 +15,21 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { api, post, useAuth } from '../api'
-import { emptyLayout, money, newId, rowMarkers, type Hall, type Layout, type Seat } from '../types'
+import {
+  emptyLayout,
+  levelOf,
+  levelsOf,
+  money,
+  newId,
+  rowMarkers,
+  type Hall,
+  type Layout,
+  type Seat,
+  type Point,
+} from '../types'
+import { hallPreset } from '../hallPresets'
+import { ShapeGlyph } from './HallGeometry'
+import { LevelTools, ObjectTools, RowTools, ShapeInspector } from './EditorTools'
 
 export function HallEditor({
   hall,
@@ -44,7 +58,20 @@ export function HallEditor({
   const [past, setPast] = useState<Layout[]>([])
   const [future, setFuture] = useState<Layout[]>([])
   const [zoom, setZoom] = useState(1)
-  const [tool, setTool] = useState<'select' | 'seat'>('select')
+  const [tool, setTool] = useState<'select' | 'seat' | 'stage-outline' | 'object-outline'>('select')
+  const [level, setLevel] = useState(levelsOf(layout)[0].id)
+  const [activeObject, setActiveObject] = useState<string | null>(null)
+  const [stageActive, setStageActive] = useState(false)
+  const [outline, setOutline] = useState<Point[]>([])
+  const visibleSeats = layout.seats.filter((s) => levelOf(s) === level)
+  function chooseLevel(id: string) {
+    setLevel(id)
+    setSelected([])
+    setActiveObject(null)
+    setStageActive(false)
+    setOutline([])
+    setTool('select')
+  }
   const [message, setMessage] = useState(draft ? 'Восстановлен локальный черновик' : '')
   const [busy, setBusy] = useState(false)
   const [dirty, setDirty] = useState(!!draft)
@@ -64,9 +91,20 @@ export function HallEditor({
     ids: string[]
     stage: boolean
     moving: boolean
+    objectId?: string
+    vertex?: number
   } | null>(null)
   const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
 
+  useEffect(() => {
+    if (!levelsOf(layout).some((l) => l.id === level)) {
+      setLevel(levelsOf(layout)[0].id)
+      setSelected([])
+      setActiveObject(null)
+      setOutline([])
+      setTool('select')
+    }
+  }, [layout.levels, level])
   useEffect(() => {
     const timer = setTimeout(() => {
       if (dirty)
@@ -126,13 +164,18 @@ export function HallEditor({
       e.preventDefault()
       remove()
     }
-    if (e.key === 'Escape') setSelected([])
+    if (e.key === 'Escape') {
+      setSelected([])
+      setOutline([])
+      setTool('select')
+    }
+    if (e.key === 'Enter' && outline.length >= 3) finishOutline()
   }
   function addBlock() {
     const width = (columns - 1) * 34
     const y = Math.max(
-      layout.stage.y + layout.stage.height + 65,
-      ...layout.seats.map((s) => s.y + 50),
+      levelOf(layout.stage) === level ? layout.stage.y + layout.stage.height + 65 : 180,
+      ...visibleSeats.map((s) => s.y + 50),
     )
     if (y + (rows - 1) * 42 > layout.height - 20 || width > layout.width - 80) {
       setMessage(
@@ -153,6 +196,7 @@ export function HallEditor({
           category_id: category,
           accessible: false,
           blocked: false,
+          level_id: level,
         })
     change({ ...layout, seats: [...layout.seats, ...seats] })
     setSelected(seats.map((s) => s.id))
@@ -165,16 +209,68 @@ export function HallEditor({
     const world = p.matrixTransform(svg.current!.getScreenCTM()!.inverse())
     return { x: world.x, y: world.y }
   }
-  function start(e: PointerEvent, id?: string, stage = false) {
+  function finishOutline() {
+    if (outline.length < 3) {
+      setMessage('Нужны хотя бы три вершины')
+      return
+    }
+    const x = Math.min(...outline.map((p) => p.x)),
+      y = Math.min(...outline.map((p) => p.y))
+    const width = Math.max(...outline.map((p) => p.x)) - x,
+      height = Math.max(...outline.map((p) => p.y)) - y
+    if (
+      width < (tool === 'stage-outline' ? 60 : 10) ||
+      height < (tool === 'stage-outline' ? 30 : 10)
+    ) {
+      setMessage('Контур слишком маленький')
+      return
+    }
+    const shape = {
+      x,
+      y,
+      width,
+      height,
+      rotation: 0,
+      shape: 'polygon' as const,
+      points: outline.map((p) => ({ x: (p.x - x) / width, y: (p.y - y) / height })),
+      level_id: level,
+    }
+    if (tool === 'stage-outline') {
+      change({ ...layout, stage: { ...layout.stage, ...shape } })
+      setStageActive(true)
+    } else if (activeObject)
+      change({
+        ...layout,
+        objects: layout.objects?.map((o) => (o.id === activeObject ? { ...o, ...shape } : o)),
+      })
+    setOutline([])
+    setTool('select')
+  }
+  function start(e: PointerEvent, id?: string, stage = false, objectId?: string, vertex?: number) {
     if (e.button !== 0) return
     e.stopPropagation()
     const p = point(e)
-    if (tool === 'seat' && !id && !stage) {
+    if (tool.endsWith('outline')) {
+      if (outline.length >= 64) {
+        setMessage('Не больше 64 вершин')
+        return
+      }
+      const next = {
+        x: Math.round(Math.max(0, Math.min(layout.width, p.x)) / 5) * 5,
+        y: Math.round(Math.max(0, Math.min(layout.height, p.y)) / 5) * 5,
+      }
+      if (!outline.some((q) => q.x === next.x && q.y === next.y)) setOutline([...outline, next])
+      return
+    }
+    setStageActive(stage)
+    setActiveObject(objectId || null)
+    if (stage || objectId) setSelected([])
+    if (tool === 'seat' && !id && !stage && !objectId) {
       const x = Math.round(p.x / 10) * 10,
         y = Math.round(p.y / 10) * 10
       if (x < 12 || y < 12 || x > layout.width - 12 || y > layout.height - 12) return
       const sameRow = layout.seats.filter(
-        (s) => s.section === section && s.row === String(rowStart),
+        (s) => levelOf(s) === level && s.section === section && s.row === String(rowStart),
       )
       change({
         ...layout,
@@ -190,6 +286,7 @@ export function HallEditor({
             category_id: category,
             accessible: false,
             blocked: false,
+            level_id: level,
           },
         ],
       })
@@ -205,11 +302,19 @@ export function HallEditor({
           ? selected
           : [id]
       setSelected(ids)
-    } else if (!stage) {
+    } else if (!stage && !objectId) {
       setSelected([])
       setBox({ x: p.x, y: p.y, w: 0, h: 0 })
     }
-    gesture.current = { before: structuredClone(layout), ...p, ids, stage, moving: false }
+    gesture.current = {
+      before: structuredClone(layout),
+      ...p,
+      ids,
+      stage,
+      moving: false,
+      objectId,
+      vertex,
+    }
     svg.current!.setPointerCapture(e.pointerId)
   }
   function move(e: PointerEvent) {
@@ -220,16 +325,38 @@ export function HallEditor({
       dy = Math.round((p.y - g.y) / 10) * 10
     if (Math.abs(dx) + Math.abs(dy) < 5) return
     g.moving = true
-    if (g.stage) {
-      const s = g.before.stage
-      setLayout({
-        ...g.before,
-        stage: {
+    if (g.stage || g.objectId) {
+      const s = g.stage ? g.before.stage : g.before.objects!.find((o) => o.id === g.objectId)!
+      let next
+      if (g.vertex !== undefined) {
+        const angle = (-(s.rotation || 0) * Math.PI) / 180
+        const ox = p.x - s.x - s.width / 2,
+          oy = p.y - s.y - s.height / 2
+        const local = {
+          x: Math.max(
+            0,
+            Math.min(1, (ox * Math.cos(angle) - oy * Math.sin(angle)) / s.width + 0.5),
+          ),
+          y: Math.max(
+            0,
+            Math.min(1, (ox * Math.sin(angle) + oy * Math.cos(angle)) / s.height + 0.5),
+          ),
+        }
+        next = { ...s, points: s.points!.map((v, i) => (i === g.vertex ? local : v)) }
+      } else
+        next = {
           ...s,
           x: Math.max(0, Math.min(layout.width - s.width, s.x + dx)),
           y: Math.max(0, Math.min(layout.height - s.height, s.y + dy)),
-        },
-      })
+        }
+      setLayout(
+        g.stage
+          ? { ...g.before, stage: next }
+          : {
+              ...g.before,
+              objects: g.before.objects!.map((o) => (o.id === g.objectId ? { ...o, ...next } : o)),
+            },
+      )
     } else if (g.ids.length) {
       const moving = g.before.seats.filter((s) => g.ids.includes(s.id))
       const boundedX = Math.max(
@@ -255,7 +382,7 @@ export function HallEditor({
       }
       setBox(next)
       setSelected(
-        layout.seats
+        visibleSeats
           .filter(
             (s) =>
               s.x >= next.x && s.x <= next.x + next.w && s.y >= next.y && s.y <= next.y + next.h,
@@ -266,7 +393,7 @@ export function HallEditor({
   }
   function finish() {
     const g = gesture.current
-    if (g?.moving && (g.stage || g.ids.length)) {
+    if (g?.moving && (g.stage || g.objectId || g.ids.length)) {
       setPast((p) => [...p.slice(-49), g.before])
       setFuture([])
       setDirty(true)
@@ -350,6 +477,7 @@ export function HallEditor({
       setSavedHall(validated)
       setCategory(validated.layout.categories[0].id)
       setSelected([])
+      chooseLevel(levelsOf(validated.layout)[0].id)
       setDirty(false)
       onSaved(validated)
       setMessage('Схема импортирована и проверена сервером')
@@ -397,6 +525,40 @@ export function HallEditor({
       <div className="editor-grid">
         <aside className="editor-panel">
           <div className="eyebrow">КОНСТРУКТОР ЗАЛА</div>
+          {!savedHall && (
+            <details className="editor-presets">
+              <summary>Начать с готовой основы</summary>
+              <p className="small muted">Заменит текущую схему. Действие можно отменить.</p>
+              {(
+                [
+                  ['theatre', 'Театр с балконами'],
+                  ['club', 'Клуб и VIP-столы'],
+                  ['arena', 'Арена с трибунами'],
+                ] as const
+              ).map(([kind, title]) => (
+                <button
+                  key={kind}
+                  className="button secondary full"
+                  onClick={() => {
+                    const next = hallPreset(kind)
+                    change(next)
+                    setCategory(next.categories[0].id)
+                    chooseLevel('ground')
+                    setRowStart(
+                      Math.max(
+                        ...next.seats
+                          .filter((s) => levelOf(s) === 'ground')
+                          .map((s) => Number(s.row)),
+                      ) + 1,
+                    )
+                  }}
+                >
+                  {title}
+                </button>
+              ))}
+            </details>
+          )}
+          <LevelTools layout={layout} change={change} level={level} setLevel={chooseLevel} />
           <h3>Добавить ряды</h3>
           <label>
             Сектор
@@ -449,6 +611,21 @@ export function HallEditor({
             Добавить блок рядов
           </button>
           <hr />
+          <RowTools layout={layout} change={change} selected={selected} />
+          <ObjectTools
+            layout={layout}
+            change={change}
+            level={level}
+            active={activeObject}
+            setActive={(id) => {
+              setActiveObject(id)
+              setStageActive(false)
+            }}
+            onDraw={() => {
+              setTool('object-outline')
+              setOutline([])
+            }}
+          />
           <h3>Ценовые категории</h3>
           {layout.categories.map((c) => (
             <div key={c.id} className="category-edit">
@@ -590,6 +767,38 @@ export function HallEditor({
               <ZoomIn size={18} />
             </button>
           </div>
+          <div className="editor-level-tabs">
+            {levelsOf(layout).map((l) => (
+              <button
+                key={l.id}
+                className={l.id === level ? 'active' : ''}
+                onClick={() => chooseLevel(l.id)}
+              >
+                {l.name}
+              </button>
+            ))}
+          </div>
+          {tool.endsWith('outline') && (
+            <div className="contour-toolbar">
+              <span>Кликайте по вершинам контура · {outline.length}/64</span>
+              <button
+                className="button primary small"
+                disabled={outline.length < 3}
+                onClick={finishOutline}
+              >
+                Завершить контур
+              </button>
+              <button
+                className="text-button"
+                onClick={() => {
+                  setOutline([])
+                  setTool('select')
+                }}
+              >
+                Отмена
+              </button>
+            </div>
+          )}
           <div className="canvas-scroll">
             <svg
               ref={svg}
@@ -608,31 +817,41 @@ export function HallEditor({
                 </pattern>
               </defs>
               <rect width={layout.width} height={layout.height} fill="url(#dots)" />
-              <g onPointerDown={(e) => start(e, undefined, true)} className="draggable">
-                <rect
-                  {...{
-                    x: layout.stage.x,
-                    y: layout.stage.y,
-                    width: layout.stage.width,
-                    height: layout.stage.height,
-                  }}
-                  rx="10"
-                  fill="#eaecf2"
-                  stroke="#d6dae5"
+              {(layout.objects || [])
+                .filter((o) => levelOf(o) === level && o.kind === 'zone')
+                .map((o) => (
+                  <ShapeGlyph
+                    key={o.id}
+                    shape={o}
+                    color={o.color}
+                    active={activeObject === o.id}
+                    onPointerDown={(e) => start(e, undefined, false, o.id)}
+                    onVertex={(e, index) => start(e, undefined, false, o.id, index)}
+                  />
+                ))}
+              <g opacity={levelOf(layout.stage) === level ? 1 : 0.25}>
+                <ShapeGlyph
+                  shape={layout.stage}
+                  active={stageActive}
+                  onPointerDown={
+                    levelOf(layout.stage) === level ? (e) => start(e, undefined, true) : undefined
+                  }
+                  onVertex={(e, index) => start(e, undefined, true, undefined, index)}
                 />
-                <text
-                  x={layout.stage.x + layout.stage.width / 2}
-                  y={layout.stage.y + layout.stage.height / 2 + 5}
-                  textAnchor="middle"
-                  fill="#778095"
-                  letterSpacing="5"
-                  fontSize="16"
-                  pointerEvents="none"
-                >
-                  {layout.stage.label}
-                </text>
               </g>
-              {layout.seats.map((s) => (
+              {(layout.objects || [])
+                .filter((o) => levelOf(o) === level && o.kind !== 'zone')
+                .map((o) => (
+                  <ShapeGlyph
+                    key={o.id}
+                    shape={o}
+                    color={o.color}
+                    active={activeObject === o.id}
+                    onPointerDown={(e) => start(e, undefined, false, o.id)}
+                    onVertex={(e, index) => start(e, undefined, false, o.id, index)}
+                  />
+                ))}
+              {visibleSeats.map((s) => (
                 <g
                   key={s.id}
                   onPointerDown={(e) => start(e, s.id)}
@@ -647,6 +866,14 @@ export function HallEditor({
                     }
                   }}
                 >
+                  <path
+                    d="M -7 7 Q 0 12 7 7"
+                    transform={`translate(${s.x} ${s.y}) rotate(${s.rotation || 0})`}
+                    fill="none"
+                    stroke="#303850"
+                    strokeWidth={2}
+                    pointerEvents="none"
+                  />
                   <circle
                     cx={s.x}
                     cy={s.y}
@@ -671,7 +898,7 @@ export function HallEditor({
                   </text>
                 </g>
               ))}
-              {rowMarkers(layout.seats).map((row) => (
+              {rowMarkers(visibleSeats).map((row) => (
                 <text
                   key={row.key}
                   x={row.x - 24}
@@ -684,7 +911,10 @@ export function HallEditor({
                     e.stopPropagation()
                     setSelected(
                       layout.seats
-                        .filter((s) => s.section === row.section && s.row === row.row)
+                        .filter(
+                          (s) =>
+                            levelOf(s) === level && s.section === row.section && s.row === row.row,
+                        )
                         .map((s) => s.id),
                     )
                   }}
@@ -695,6 +925,20 @@ export function HallEditor({
                   {row.row}
                 </text>
               ))}
+              {outline.length > 0 && (
+                <g pointerEvents="none">
+                  <polyline
+                    points={outline.map((p) => `${p.x},${p.y}`).join(' ')}
+                    fill="#7561ef18"
+                    stroke="#7561ef"
+                    strokeWidth={2}
+                    strokeDasharray="5 3"
+                  />
+                  {outline.map((p, i) => (
+                    <circle key={i} cx={p.x} cy={p.y} r={5} fill="#7561ef" />
+                  ))}
+                </g>
+              )}
               {box && (
                 <rect
                   x={box.x}
@@ -802,43 +1046,16 @@ export function HallEditor({
             </p>
           )}
           <hr />
-          <h3>Сцена</h3>
-          <label>
-            Надпись
-            <input
-              value={layout.stage.label}
-              maxLength={80}
-              onChange={(e) =>
-                change({ ...layout, stage: { ...layout.stage, label: e.target.value } })
-              }
-            />
-          </label>
-          <div className="form-grid">
-            <label>
-              Ширина
-              <input
-                type="number"
-                min="60"
-                max={layout.width}
-                value={layout.stage.width}
-                onChange={(e) =>
-                  change({ ...layout, stage: { ...layout.stage, width: Number(e.target.value) } })
-                }
-              />
-            </label>
-            <label>
-              Высота
-              <input
-                type="number"
-                min="30"
-                max={layout.height}
-                value={layout.stage.height}
-                onChange={(e) =>
-                  change({ ...layout, stage: { ...layout.stage, height: Number(e.target.value) } })
-                }
-              />
-            </label>
-          </div>
+          <ShapeInspector
+            shape={layout.stage}
+            label="Сцена"
+            onChange={(stage) => change({ ...layout, stage })}
+            onDraw={() => {
+              chooseLevel(levelOf(layout.stage))
+              setTool('stage-outline')
+              setOutline([])
+            }}
+          />
           <hr />
           <div className="small muted">
             При сохранении проверяются пересечения, границы, нумерация и цены. Опубликованные

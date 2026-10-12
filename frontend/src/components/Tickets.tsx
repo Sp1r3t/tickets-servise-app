@@ -31,7 +31,10 @@ export function TicketCard({ ticket, event }: { ticket: TicketType; event: Event
           {date(event.starts_at, event.timezone)} · {event.venue}
         </p>
         <div className="ticket-place">
-          <span>{ticket.item.section}</span>
+          <span>
+            {ticket.item.level ? `${ticket.item.level} · ` : ''}
+            {ticket.item.section}
+          </span>
           <strong>Ряд {ticket.item.row}</strong>
           <strong>Место {ticket.item.number}</strong>
         </div>

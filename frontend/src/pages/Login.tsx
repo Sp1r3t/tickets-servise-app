@@ -1,5 +1,5 @@
 import { ArrowRight, Music2 } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../api'
 import { Notice } from '../components/ui'
@@ -13,13 +13,18 @@ export function Login() {
   const [role, setRole] = useState(query.get('role') === 'organizer' ? 'organizer' : 'buyer')
   const [message, setMessage] = useState(''),
     [busy, setBusy] = useState(false)
+  useEffect(() => {
+    setMode(query.get('mode') === 'register' ? 'register' : 'login')
+    setRole(query.get('role') === 'organizer' ? 'organizer' : 'buyer')
+    setMessage('')
+  }, [query])
   const back = query.get('return')
   const destination =
     back?.startsWith('/') && !back.startsWith('//') && !back.startsWith('/login')
       ? back
       : user?.role === 'organizer'
         ? '/organizer'
-        : '/account'
+        : '/'
   if (user) return <Navigate to={destination} replace />
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -41,7 +46,7 @@ export function Login() {
           ? back
           : authenticated.role === 'organizer'
             ? '/organizer'
-            : '/account',
+            : '/',
       )
     } catch (err) {
       setMessage(errorText(err))
@@ -57,7 +62,7 @@ export function Login() {
           Всё начинается
           <br />с одного билета.
         </h1>
-        <p>Создавайте концерты, собирайте зал и встречайте своих зрителей.</p>
+        <p>Находите свою музыку, выбирайте места и храните билеты в одном кабинете.</p>
         <div className="auth-visual">
           <Music2 size={80} />
           <span>LIVE / TICKETFLOW</span>

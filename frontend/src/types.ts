@@ -10,18 +10,70 @@ export type Seat = {
   category_id: string
   accessible: boolean
   blocked: boolean
+  level_id?: string
+  rotation?: number
+}
+export type Point = { x: number; y: number }
+export type Shape = {
+  x: number
+  y: number
+  width: number
+  height: number
+  label: string
+  shape?: 'rect' | 'ellipse' | 'polygon'
+  points?: Point[]
+  rotation?: number
+  level_id?: string
+}
+export type HallObject = Shape & {
+  id: string
+  kind: 'zone' | 'table' | 'bar' | 'column' | 'stairs' | 'entrance' | 'technical' | 'decoration'
+  color: string
+  blocks_seats: boolean
 }
 export type Layout = {
   width: number
   height: number
-  stage: { x: number; y: number; width: number; height: number; label: string }
+  stage: Shape
+  levels?: { id: string; name: string }[]
+  objects?: HallObject[]
   categories: Category[]
   seats: Seat[]
 }
-export type Hall = { id: string; name: string; revision: number; layout: Layout }
+export type VenueInfo = { city: string; venue: string; address: string; author?: string }
+export type Hall = {
+  id: string
+  name: string
+  revision: number
+  layout: Layout
+  venue_info?: VenueInfo | null
+}
+export type HallTemplate = {
+  id: string
+  name: string
+  author: string
+  seat_count: number
+  level_count: number
+  created_at: number
+}
+export type CommunityVenue = VenueInfo & { venue_key: string; templates: HallTemplate[] }
+export type LibraryPage = { venues: CommunityVenue[]; has_more: boolean }
+export const levelsOf = (layout: Layout) => layout.levels || [{ id: 'ground', name: 'Партер' }]
+export const levelOf = (item: { level_id?: string }) => item.level_id || 'ground'
+export const genres: Record<string, string> = {
+  live: 'Живая музыка',
+  rock: 'Рок',
+  pop: 'Поп',
+  electronic: 'Электроника',
+  jazz: 'Джаз',
+  classical: 'Классика',
+  other: 'Другое',
+}
+
 export type EventDetails = {
   title: string
   artist: string
+  genre?: string
   description: string
   starts_at: string
   doors_at: string
@@ -40,6 +92,7 @@ export type Concert = {
   id: string
   slug: string
   status?: string
+  min_price?: number | null
   details: EventDetails
   layout?: Layout
 }
@@ -51,6 +104,7 @@ export type Item = {
   number: string
   category: string
   accessible: boolean
+  level?: string
 }
 export type Ticket = { id: string; item: Item; code: string; checked_in_at: number | null }
 export type Order = {
@@ -88,7 +142,7 @@ export const newId = () => crypto.randomUUID()
 export function rowMarkers(seats: Seat[]) {
   const rows = new Map<string, Seat>()
   for (const seat of seats) {
-    const key = `${seat.section}|${seat.row}`
+    const key = `${levelOf(seat)}|${seat.section}|${seat.row}`
     const left = rows.get(key)
     if (!left || seat.x < left.x) rows.set(key, seat)
   }

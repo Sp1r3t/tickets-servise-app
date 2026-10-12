@@ -1,15 +1,19 @@
 import { ArrowRight, Check } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, useRef, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, post, useAuth } from '../api'
+import { HallLibrary } from '../components/HallLibrary'
 import { Loading, Notice } from '../components/ui'
 import { errorText } from '../constants'
-import { type Concert, type EventDetails, type Hall } from '../types'
+import { genres, type Concert, type EventDetails, type Hall } from '../types'
 
 export function EventForm() {
   const { user } = useAuth(),
     { id } = useParams(),
     navigate = useNavigate()
+  const formRef = useRef<HTMLFormElement>(null)
+  const [showLibrary, setShowLibrary] = useState(false)
+  const [copiedHall, setCopiedHall] = useState<Hall | null>(null)
   const [halls, setHalls] = useState<Hall[]>([]),
     [details, setDetails] = useState<EventDetails | null>(null),
     [ready, setReady] = useState(false),
@@ -73,6 +77,36 @@ export function EventForm() {
         </Link>
       </div>
       <Notice message={message} />
+      <div className="event-library-callout">
+        <div>
+          <strong>У площадки уже может быть готовая схема</strong>
+          <p className="small muted">Поищите её в библиотеке перед созданием своей.</p>
+        </div>
+        <button className="button secondary" onClick={() => setShowLibrary(!showLibrary)}>
+          {showLibrary ? 'Скрыть библиотеку' : 'Выбрать площадку'}
+        </button>
+      </div>
+      {showLibrary && (
+        <HallLibrary
+          onCopy={(hall) => {
+            if (formRef.current) {
+              const body = Object.fromEntries(new FormData(formRef.current).entries())
+              setDetails({
+                ...body,
+                starts_at: `${body.starts_at}:00+03:00`,
+                doors_at: `${body.doors_at}:00+03:00`,
+                age_limit: Number(body.age_limit),
+                timezone: 'Europe/Moscow',
+                poster_url: body.poster_url || null,
+              } as EventDetails)
+            }
+            setHalls((previous) => [hall, ...previous])
+            setCopiedHall(hall)
+            setShowLibrary(false)
+          }}
+        />
+      )}
+
       {!halls.length ? (
         <div className="empty">
           <h2>Сначала создайте схему зала</h2>
@@ -83,7 +117,12 @@ export function EventForm() {
           </Link>
         </div>
       ) : (
-        <form className="event-form" onSubmit={submit}>
+        <form
+          ref={formRef}
+          key={copiedHall?.id || id || 'new'}
+          className="event-form"
+          onSubmit={submit}
+        >
           <div className="panel form-panel">
             <h3>О концерте</h3>
             <label>
@@ -118,6 +157,16 @@ export function EventForm() {
                 defaultValue={details?.description}
                 placeholder="Программа, участники и всё, что нужно знать зрителю"
               />
+            </label>
+            <label>
+              Жанр
+              <select name="genre" defaultValue={details?.genre || 'live'}>
+                {Object.entries(genres).map(([key, name]) => (
+                  <option key={key} value={key}>
+                    {name}
+                  </option>
+                ))}
+              </select>
             </label>
             <label>
               Ссылка на афишу
@@ -167,7 +216,11 @@ export function EventForm() {
               <h3>Площадка и продажи</h3>
               <label>
                 Схема зала
-                <select name="hall_id" required defaultValue={details?.hall_id || halls[0].id}>
+                <select
+                  name="hall_id"
+                  required
+                  defaultValue={copiedHall?.id || details?.hall_id || halls[0].id}
+                >
                   {halls.map((h) => (
                     <option key={h.id} value={h.id}>
                       {h.name} · {h.layout.seats.length} мест
@@ -182,7 +235,7 @@ export function EventForm() {
                   required
                   minLength={2}
                   maxLength={120}
-                  defaultValue={details?.city}
+                  defaultValue={copiedHall?.venue_info?.city || details?.city}
                 />
               </label>
               <label>
@@ -192,7 +245,7 @@ export function EventForm() {
                   required
                   minLength={2}
                   maxLength={180}
-                  defaultValue={details?.venue}
+                  defaultValue={copiedHall?.venue_info?.venue || details?.venue}
                 />
               </label>
               <label>
@@ -202,7 +255,7 @@ export function EventForm() {
                   required
                   minLength={5}
                   maxLength={250}
-                  defaultValue={details?.address}
+                  defaultValue={copiedHall?.venue_info?.address || details?.address}
                 />
               </label>
               <label>

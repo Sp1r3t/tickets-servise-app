@@ -1,6 +1,7 @@
 import { Armchair, ArrowRight, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { HallLibrary } from '../components/HallLibrary'
 import { HallEditor } from '../components/HallEditor'
 import { SeatMap } from '../components/SeatMap'
 import { Loading, Notice } from '../components/ui'
@@ -8,6 +9,7 @@ import { errorText } from '../constants'
 import { type Hall } from '../types'
 
 export function Halls() {
+  const [tab, setTab] = useState<'own' | 'community'>('own')
   const [halls, setHalls] = useState<Hall[]>([]),
     [editing, setEditing] = useState<Hall | 'new' | null>(null),
     [message, setMessage] = useState(''),
@@ -44,39 +46,62 @@ export function Halls() {
           Создать зал
         </button>
       </div>
+      <div className="library-tabs">
+        <button className={tab === 'own' ? 'active' : ''} onClick={() => setTab('own')}>
+          Мои схемы · {halls.length}
+        </button>
+        <button className={tab === 'community' ? 'active' : ''} onClick={() => setTab('community')}>
+          Библиотека площадок
+        </button>
+      </div>
       <Notice message={message} />
-      {!ready ? (
-        <Loading />
-      ) : halls.length ? (
-        <div className="hall-grid">
-          {halls.map((h) => (
-            <button className="hall-card" key={h.id} onClick={() => setEditing(h)}>
-              <div className="hall-preview">
-                <SeatMap layout={h.layout} />
-              </div>
-              <div className="hall-card-info">
-                <strong>{h.name}</strong>
-                <span className="small muted">
-                  {h.layout.seats.length} мест · Версия {h.revision}
-                </span>
-                <span className="text-button small">
-                  Открыть редактор
-                  <ArrowRight size={15} />
-                </span>
-              </div>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="empty">
-          <Armchair size={35} />
-          <h2>Здесь будет ваша первая схема</h2>
-          <p className="muted">Добавьте сцену, ряды и ценовые категории в визуальном редакторе.</p>
-          <button className="button primary" onClick={() => setEditing('new')}>
-            Открыть редактор
-            <ArrowRight size={16} />
-          </button>
-        </div>
+      {tab === 'community' && (
+        <HallLibrary
+          onCreate={() => setEditing('new')}
+          onCopy={(hall) => {
+            setHalls((previous) => [hall, ...previous])
+            setEditing(hall)
+          }}
+        />
+      )}
+      {tab === 'own' && (
+        <>
+          {!ready ? (
+            <Loading />
+          ) : halls.length ? (
+            <div className="hall-grid">
+              {halls.map((h) => (
+                <button className="hall-card" key={h.id} onClick={() => setEditing(h)}>
+                  <div className="hall-preview">
+                    <SeatMap layout={h.layout} showLevels={false} />
+                  </div>
+                  <div className="hall-card-info">
+                    <strong>{h.name}</strong>
+                    <span className="small muted">
+                      {h.layout.seats.length} мест · Версия {h.revision}
+                    </span>
+                    <span className="text-button small">
+                      Открыть редактор
+                      <ArrowRight size={15} />
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="empty">
+              <Armchair size={35} />
+              <h2>Здесь будет ваша первая схема</h2>
+              <p className="muted">
+                Добавьте сцену, ряды и ценовые категории в визуальном редакторе.
+              </p>
+              <button className="button primary" onClick={() => setEditing('new')}>
+                Открыть редактор
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          )}
+        </>
       )}
     </>
   )

@@ -25,14 +25,55 @@ class Seat(StrictModel):
     category_id: str
     accessible: bool = False
     blocked: bool = False
+    level_id: str = "ground"
+    rotation: float = Field(default=0, ge=-360, le=360, allow_inf_nan=False)
 
 
-class Stage(StrictModel):
-    x: float = Field(ge=0, le=1800, allow_inf_nan=False)
-    y: float = Field(ge=0, le=1300, allow_inf_nan=False)
+class Point(StrictModel):
+    x: float = Field(ge=0, le=1, allow_inf_nan=False)
+    y: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+
+class Shape(StrictModel):
+    x: float = Field(ge=0, le=2000, allow_inf_nan=False)
+    y: float = Field(ge=0, le=1500, allow_inf_nan=False)
+    width: float = Field(ge=10, le=2000, allow_inf_nan=False)
+    height: float = Field(ge=10, le=1500, allow_inf_nan=False)
+    label: str = Field(default="Объект", min_length=1, max_length=80)
+    shape: Literal["rect", "ellipse", "polygon"] = "rect"
+    points: list[Point] = Field(default_factory=list, max_length=64)
+    rotation: float = Field(default=0, ge=-360, le=360, allow_inf_nan=False)
+    level_id: str = "ground"
+
+    @model_validator(mode="after")
+    def contour(self):
+        from services.common.geometry import validate_polygon
+
+        if self.shape == "polygon":
+            if len(self.points) < 3:
+                raise ValueError("Для контура нужны хотя бы три вершины")
+            validate_polygon([(p.x, p.y) for p in self.points])
+        elif self.points:
+            raise ValueError("Вершины разрешены только для свободного контура")
+        return self
+
+
+class Stage(Shape):
     width: float = Field(ge=60, le=2000, allow_inf_nan=False)
     height: float = Field(ge=30, le=1500, allow_inf_nan=False)
     label: str = Field(default="СЦЕНА", min_length=1, max_length=80)
+
+
+class HallObject(Shape):
+    id: str = Field(min_length=1, max_length=80)
+    kind: Literal["zone", "table", "bar", "column", "stairs", "entrance", "technical", "decoration"] = "zone"
+    color: str = Field(default="#dce3ef", pattern=r"^#[0-9a-fA-F]{6}$")
+    blocks_seats: bool = False
+
+
+class Level(StrictModel):
+    id: str = Field(min_length=1, max_length=80)
+    name: str = Field(min_length=1, max_length=80)
 
 
 class Layout(StrictModel):
@@ -41,30 +82,75 @@ class Layout(StrictModel):
     stage: Stage
     categories: list[Category] = Field(min_length=1, max_length=20)
     seats: list[Seat] = Field(default_factory=list, max_length=5000)
+    levels: list[Level] = Field(
+        default_factory=lambda: [Level(id="ground", name="Партер")], min_length=1, max_length=12
+    )
+    objects: list[HallObject] = Field(default_factory=list, max_length=200)
 
     @model_validator(mode="after")
     def validate_geometry(self):
+        from services.common.geometry import (
+            circle_touches_polygon,
+            circle_touches_ellipse,
+            ellipse_bounds,
+            outline,
+        )
+
         categories = {c.id for c in self.categories}
-        if len(categories) != len(self.categories):
-            raise ValueError("ID категорий должны быть уникальны")
-        if self.stage.x + self.stage.width > self.width or self.stage.y + self.stage.height > self.height:
-            raise ValueError("Сцена выходит за границы зала")
+        levels = {level.id for level in self.levels}
+        if len(categories) != len(self.categories) or len(levels) != len(self.levels):
+            raise ValueError("ID категорий и уровней должны быть уникальны")
+        if len({obj.id for obj in self.objects}) != len(self.objects):
+            raise ValueError("ID объектов должны быть уникальны")
+        blockers = []
+        for obj in [self.stage, *self.objects]:
+            if obj.level_id not in levels:
+                raise ValueError("Объект ссылается на неизвестный уровень")
+            points = outline(obj)
+            bounds = (
+                ellipse_bounds(obj)
+                if obj.shape == "ellipse"
+                else (
+                    min(x for x, y in points),
+                    min(y for x, y in points),
+                    max(x for x, y in points),
+                    max(y for x, y in points),
+                )
+            )
+            if (
+                bounds[0] < -1e-7
+                or bounds[1] < -1e-7
+                or bounds[2] > self.width + 1e-7
+                or bounds[3] > self.height + 1e-7
+            ):
+                raise ValueError("Сцена или объект выходит за границы зала")
+            if obj is self.stage or obj.blocks_seats:
+                blockers.append((obj, points, bounds))
         ids, labels, cells = set(), set(), {}
         for seat in self.seats:
-            label = (seat.section, seat.row, seat.number)
+            label = (seat.level_id, seat.section, seat.row, seat.number)
             if seat.id in ids or label in labels:
                 raise ValueError("Повторяющиеся ID или номера мест")
-            if seat.category_id not in categories:
-                raise ValueError("Место ссылается на неизвестную категорию")
+            if seat.category_id not in categories or seat.level_id not in levels:
+                raise ValueError("Место ссылается на неизвестную категорию или уровень")
             if seat.x + 12 > self.width or seat.y + 12 > self.height:
                 raise ValueError("Место выходит за границы зала")
-            s = self.stage
-            if s.x - 12 < seat.x < s.x + s.width + 12 and s.y - 12 < seat.y < s.y + s.height + 12:
-                raise ValueError("Место пересекает сцену")
-            cell = (int(seat.x // 24), int(seat.y // 24))
+            for obj, points, bounds in blockers:
+                if obj.level_id != seat.level_id or not (
+                    bounds[0] - 12 < seat.x < bounds[2] + 12 and bounds[1] - 12 < seat.y < bounds[3] + 12
+                ):
+                    continue
+                touches = (
+                    circle_touches_ellipse(seat.x, seat.y, 12, obj)
+                    if obj.shape == "ellipse"
+                    else circle_touches_polygon(seat.x, seat.y, 12, points)
+                )
+                if touches:
+                    raise ValueError("Место пересекает сцену или препятствие")
+            cell = (seat.level_id, int(seat.x // 24), int(seat.y // 24))
             for dx in (-1, 0, 1):
                 for dy in (-1, 0, 1):
-                    for other in cells.get((cell[0] + dx, cell[1] + dy), []):
+                    for other in cells.get((cell[0], cell[1] + dx, cell[2] + dy), []):
                         if (seat.x - other.x) ** 2 + (seat.y - other.y) ** 2 < 24**2:
                             raise ValueError("Места пересекаются: расстояние должно быть не меньше 24")
             cells.setdefault(cell, []).append(seat)
@@ -81,6 +167,7 @@ class HallInput(StrictModel):
 
 class EventInput(StrictModel):
     title: str = Field(min_length=3, max_length=180)
+    genre: Literal["live", "rock", "pop", "electronic", "jazz", "classical", "other"] = "live"
     artist: str = Field(min_length=2, max_length=180)
     description: str = Field(min_length=20, max_length=10000)
     starts_at: datetime

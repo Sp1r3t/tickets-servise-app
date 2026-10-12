@@ -1847,3 +1847,983 @@ a:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Audience discovery */
+.header-auth {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.afisha {
+  max-width: 1240px;
+  margin: 0 auto;
+}
+.afisha-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0 28px;
+}
+.afisha-heading h1 {
+  font-size: clamp(38px, 5vw, 56px);
+  letter-spacing: -2px;
+  margin: 6px 0 0;
+}
+.heading-dot {
+  color: #7952eb;
+}
+.city-selector {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  background: white;
+  margin: 0;
+}
+.city-selector select {
+  border: 0;
+  padding: 7px;
+  width: auto;
+  background: transparent;
+  font-weight: 700;
+}
+.discovery-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  min-height: 410px;
+  background: #19162d;
+  border-radius: 26px;
+  color: white;
+  overflow: hidden;
+}
+.discovery-copy {
+  padding: 45px 48px;
+  position: relative;
+  z-index: 2;
+}
+.live-chip {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.7px;
+  color: #d7d0ff;
+}
+.live-chip span {
+  width: 6px;
+  height: 6px;
+  background: #b1fdcd;
+  border-radius: 100%;
+  box-shadow: 0 0 12px #b1fdcd;
+}
+.discovery-copy h2 {
+  font-size: clamp(35px, 4.2vw, 59px);
+  line-height: 1.13;
+  letter-spacing: -2px;
+  margin: 26px 0 20px;
+}
+.discovery-copy em {
+  font-style: normal;
+  color: #bca4ff;
+}
+.discovery-copy p {
+  font-size: 13px;
+  line-height: 1.9;
+  color: #b9b2cc;
+  max-width: 370px;
+}
+.discovery-button {
+  background: #c2ffcc;
+  color: #1b3724;
+  margin-top: 16px;
+  box-shadow: 0 8px 30px #07120b30;
+}
+.discovery-button:hover {
+  background: #aff9bc;
+}
+.discovery-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at 60% 50%, #7650b9a8 0, transparent 65%);
+  min-width: 0;
+}
+.orbital {
+  position: absolute;
+  border: 1px solid #c5adff30;
+  border-radius: 50%;
+  width: 340px;
+  height: 340px;
+  transform: rotate(-28deg) scaleX(1.4);
+}
+.orbital-two {
+  width: 440px;
+  height: 440px;
+  border-color: #c5adff17;
+  transform: rotate(26deg) scaleX(0.85);
+}
+.sound-wave {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transform: rotate(-11deg);
+  padding-bottom: 50px;
+}
+.sound-wave i {
+  display: block;
+  width: 10px;
+  background: linear-gradient(#d3b5ff, #7048d8);
+  border-radius: 8px;
+  box-shadow: 0 0 24px #aa7cf530;
+}
+.floating-ticket {
+  position: absolute;
+  bottom: 58px;
+  left: 20px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #ffffff12;
+  border: 1px solid #ffffff23;
+  border-radius: 15px;
+  padding: 23px 19px;
+  backdrop-filter: blur(12px);
+  transform: rotate(-5deg);
+}
+.floating-ticket > svg {
+  color: #c2ffcc;
+  flex-shrink: 0;
+}
+.floating-ticket strong {
+  display: block;
+  font-size: 13px;
+}
+.floating-ticket span {
+  display: block;
+  font-size: 10px;
+  color: #c4bdd5;
+  margin-top: 7px;
+}
+.hero-art-label {
+  position: absolute;
+  bottom: 22px;
+  right: 33px;
+  font-size: 8px;
+  letter-spacing: 3px;
+  color: #9b8ab4;
+}
+.genre-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 26px 0 20px;
+  scrollbar-width: thin;
+}
+.genre-tabs button {
+  white-space: nowrap;
+  padding: 12px 19px;
+  border-radius: 30px;
+  border: 1px solid #e5e4ed;
+  background: white;
+  color: #717086;
+  font-size: 12px;
+  font-weight: 600;
+}
+.genre-tabs .active {
+  background: #2c2443;
+  border-color: #2c2443;
+  color: white;
+}
+.afisha-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  margin-bottom: 28px;
+  scroll-margin-top: 20px;
+}
+.afisha-search {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 5px 15px;
+  margin: 0;
+  color: #9d96ad;
+}
+.afisha-search input {
+  border: none;
+  background: transparent;
+  padding: 13px 0;
+  box-shadow: none;
+  min-width: 0;
+}
+.filter-control {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px 12px;
+  margin: 0;
+  color: #80788f;
+}
+.filter-control select,
+.afisha-sort select {
+  border: 0;
+  background: transparent;
+  width: auto;
+  padding: 8px;
+  font-size: 12px;
+  color: #60586f;
+}
+.featured-concert {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  padding: 24px;
+  border: 1px solid #ded8ed;
+  background: linear-gradient(110deg, #eeebfa, #f8f9fc);
+  border-radius: 18px;
+  margin-bottom: 35px;
+}
+.featured-icon {
+  width: 58px;
+  height: 58px;
+  flex-shrink: 0;
+  border-radius: 16px;
+  background: #e0d8f8;
+  color: #8061bc;
+  display: grid;
+  place-items: center;
+}
+.featured-concert .eyebrow {
+  font-size: 8px;
+}
+.featured-concert h3 {
+  margin: 8px 0;
+  font-size: 20px;
+}
+.featured-concert p {
+  margin: 0;
+  font-size: 11px;
+  color: #817992;
+}
+.featured-price {
+  margin-left: auto;
+  font-size: 15px;
+  font-weight: 750;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  white-space: nowrap;
+}
+.afisha-sort {
+  margin: 0;
+}
+.afisha-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 25px;
+}
+.afisha-card {
+  border: 1px solid #e9e6f0;
+  border-radius: 18px;
+  overflow: hidden;
+  background: white;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+  min-width: 0;
+}
+.afisha-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 15px 45px #25134214;
+}
+.afisha-poster {
+  height: 290px;
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(circle at 75% 20%, #9062bd, #45295b 50%, #22172d);
+  color: white;
+}
+.afisha-poster::before {
+  content: '';
+  position: absolute;
+  width: 280px;
+  height: 280px;
+  border: 34px solid #ffffff0b;
+  border-radius: 100%;
+  left: -75px;
+  top: 28px;
+}
+.poster-1 {
+  background: radial-gradient(circle at 80% 15%, #49799b, #27435f 50%, #142637);
+}
+.poster-2 {
+  background: radial-gradient(circle at 80% 10%, #e9a261, #9a4949 50%, #502837);
+}
+.poster-3 {
+  background: radial-gradient(circle at 75% 20%, #57917e, #2b5c53 50%, #173c35);
+}
+.afisha-poster img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.poster-lettering {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 15px;
+  padding: 28px;
+}
+.poster-lettering span {
+  font-size: 12px;
+  letter-spacing: 7px;
+  color: #ffffffb3;
+}
+.poster-lettering strong {
+  font-size: clamp(22px, 2.5vw, 35px);
+  font-weight: 800;
+  line-height: 1.15;
+  max-width: 90%;
+  letter-spacing: -1px;
+  overflow-wrap: anywhere;
+}
+.poster-lettering svg {
+  color: #ffffff65;
+}
+.age-pill {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  padding: 6px 9px;
+  border: 1px solid #ffffff50;
+  background: #00000025;
+  backdrop-filter: blur(5px);
+  border-radius: 7px;
+  font-size: 10px;
+}
+.poster-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, #00000065);
+  padding: 25px 20px 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+.poster-bottom span:last-child {
+  font-size: 22px;
+}
+.afisha-card-info {
+  padding: 22px;
+}
+.card-date {
+  color: #8361bd;
+  font-size: 11px;
+  font-weight: 700;
+}
+.afisha-card h3 {
+  font-size: 19px;
+  line-height: 1.4;
+  margin: 11px 0 9px;
+}
+.afisha-card-info > p {
+  color: #91899c;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.card-sale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid #eeebf3;
+  padding-top: 17px;
+  margin-top: 20px;
+}
+.card-sale strong {
+  font-size: 17px;
+  white-space: nowrap;
+}
+.card-sale span {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: #8162bb;
+  font-size: 10px;
+  font-weight: 700;
+}
+.afisha-benefits {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  margin: 56px 0;
+  border-top: 1px solid #e6e2ed;
+  padding-top: 32px;
+}
+.afisha-benefits svg {
+  color: #8a66bf;
+  display: block;
+  margin-bottom: 15px;
+}
+.afisha-benefits strong {
+  font-size: 13px;
+}
+.afisha-benefits p {
+  color: #92899e;
+  font-size: 11px;
+  line-height: 1.8;
+}
+.afisha-footer {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-top: 1px solid #e6e2ed;
+  padding: 28px 0 0;
+  margin-top: 35px;
+  font-size: 10px;
+  color: #8a8196;
+}
+.afisha-footer strong {
+  color: #463254;
+  font-size: 19px;
+  letter-spacing: -0.8px;
+}
+.afisha-footer a {
+  margin-left: auto;
+}
+
+/* Community hall selection and organizer workspace */
+.library-tabs,
+.editor-level-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 22px;
+}
+.library-tabs button,
+.editor-level-tabs button {
+  border: 1px solid var(--border);
+  background: white;
+  padding: 10px 16px;
+  border-radius: 9px;
+  font-size: 11px;
+  color: #777086;
+}
+.library-tabs button.active,
+.editor-level-tabs button.active {
+  background: #eeebfc;
+  color: #7555bf;
+  border-color: #d2c8f1;
+  font-weight: 700;
+}
+.community-library {
+  border: 1px solid var(--border);
+  background: white;
+  padding: 25px;
+  border-radius: 15px;
+  margin-bottom: 26px;
+}
+.library-intro {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.library-icon {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: #efebfc;
+  color: #7d61bd;
+  border-radius: 13px;
+}
+.library-intro h3 {
+  margin: 0 0 5px;
+  font-size: 17px;
+}
+.library-intro p {
+  font-size: 11px;
+  color: #93909f;
+  margin: 0;
+}
+.library-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.65fr) minmax(0, 1.6fr);
+  gap: 25px;
+  margin-top: 25px;
+}
+.venue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  max-height: 650px;
+  overflow-y: auto;
+}
+.venue-choice {
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fcfcfe;
+  padding: 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.venue-choice.active {
+  border-color: #ae98e7;
+  background: #f5f2fc;
+}
+.venue-choice strong {
+  font-size: 13px;
+}
+.venue-choice span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: #92889f;
+}
+.venue-choice small {
+  font-size: 10px;
+  color: #a39aac;
+  line-height: 1.6;
+}
+.venue-choice .badge {
+  align-self: flex-start;
+  font-size: 9px;
+}
+.library-preview {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fafbfe;
+  padding: 15px;
+  margin-top: 20px;
+}
+.library-preview .seat-map {
+  width: 100%;
+  max-height: 390px;
+}
+.template-meta {
+  display: flex;
+  gap: 13px;
+  flex-wrap: wrap;
+  color: #91839d;
+  font-size: 10px;
+}
+.template-meta span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.library-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  margin-top: 20px;
+  font-size: 12px;
+}
+.event-library-callout,
+.organizer-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  background: linear-gradient(110deg, #eeebfc, #f7f8fe);
+  border: 1px solid #e0d8f3;
+  padding: 24px;
+  border-radius: 13px;
+  margin-bottom: 24px;
+}
+.event-library-callout strong {
+  font-size: 13px;
+}
+.event-library-callout p {
+  margin-bottom: 0;
+}
+.organizer-summary h2 {
+  margin: 12px 0 0;
+  font-size: 36px;
+  letter-spacing: -1px;
+}
+.organizer-shortcuts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.organizer-shortcuts a {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 22px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.organizer-shortcuts a > svg {
+  color: #8768ba;
+  flex-shrink: 0;
+}
+.organizer-shortcuts a > svg:last-child {
+  margin-left: auto;
+}
+.organizer-shortcuts strong {
+  font-size: 12px;
+}
+.organizer-shortcuts p {
+  font-size: 10px;
+  color: #a49baa;
+  line-height: 1.6;
+  margin-bottom: 0;
+}
+.dashboard-filters {
+  padding: 18px 22px;
+  display: flex;
+  gap: 15px;
+  border-bottom: 1px solid var(--border);
+}
+.dashboard-filters label {
+  margin: 0;
+  flex: 1;
+}
+.dashboard-filters select {
+  max-width: 180px;
+}
+.editor-level-tabs {
+  padding: 14px 18px;
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+  background: #fcfcfe;
+}
+.editor-panel h3 {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+.editor-panel input[type='range'] {
+  padding: 0;
+  accent-color: #8562d3;
+}
+.contour-toolbar {
+  padding: 12px 15px;
+  background: #f2edff;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 10px;
+  color: #8465b4;
+}
+.danger-text {
+  color: #ba5555;
+  margin-top: 10px;
+}
+.seat-map-container {
+  min-width: 0;
+}
+.hall-preview .editor-level-tabs {
+  padding: 4px;
+}
+.hall-preview .editor-level-tabs button {
+  padding: 4px 7px;
+  font-size: 8px;
+}
+@media (min-width: 1151px) {
+  .editor-panel {
+    max-height: 900px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .editor-canvas {
+    align-self: start;
+    position: sticky;
+    top: 10px;
+  }
+}
+@media (max-width: 1000px) {
+  .afisha-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .discovery-copy {
+    padding: 35px 30px;
+  }
+  .discovery-hero {
+    min-height: 380px;
+  }
+  .floating-ticket {
+    padding: 17px 12px;
+    left: 0;
+    right: 15px;
+  }
+  .floating-ticket strong {
+    font-size: 11px;
+  }
+  .sound-wave {
+    gap: 5px;
+  }
+  .sound-wave i {
+    width: 7px;
+  }
+}
+@media (max-width: 650px) {
+  .topbar {
+    gap: 10px;
+    padding: 0 14px;
+  }
+  .brand {
+    font-size: 19px;
+    gap: 6px;
+  }
+  .brand-icon {
+    width: 29px;
+    height: 29px;
+  }
+  .header-auth {
+    gap: 7px;
+  }
+  .header-auth .button {
+    font-size: 10px;
+    padding: 10px 9px;
+  }
+  .topbar .spacer {
+    min-width: 0;
+  }
+  .user-link {
+    max-width: 160px;
+    overflow: hidden;
+  }
+  .afisha-heading {
+    margin-top: 0;
+    margin-bottom: 22px;
+  }
+  .afisha-heading h1 {
+    font-size: 39px;
+  }
+  .city-selector {
+    padding: 3px 6px;
+    gap: 0;
+  }
+  .city-selector select {
+    max-width: 145px;
+    font-size: 11px;
+  }
+  .discovery-hero {
+    grid-template-columns: 1fr;
+    border-radius: 19px;
+  }
+  .discovery-copy {
+    padding: 30px 24px 24px;
+  }
+  .discovery-copy h2 {
+    font-size: 42px;
+  }
+  .live-chip {
+    font-size: 7px;
+    letter-spacing: 1px;
+  }
+  .discovery-art {
+    min-height: 230px;
+  }
+  .sound-wave {
+    padding-bottom: 50px;
+  }
+  .floating-ticket {
+    bottom: 35px;
+    left: 30px;
+    right: 30px;
+  }
+  .hero-art-label {
+    font-size: 6px;
+    bottom: 9px;
+  }
+  .genre-tabs {
+    padding: 22px 0 16px;
+  }
+  .genre-tabs button {
+    padding: 10px 15px;
+    font-size: 10px;
+  }
+  .afisha-tools {
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+  }
+  .afisha-search {
+    grid-column: 1/-1;
+  }
+  .filter-control {
+    padding: 5px;
+    min-width: 0;
+  }
+  .filter-control select {
+    font-size: 10px;
+    width: 100%;
+    min-width: 0;
+    padding: 7px 3px;
+  }
+  .filter-control svg {
+    flex-shrink: 0;
+  }
+  .featured-concert {
+    flex-wrap: wrap;
+    padding: 18px;
+    gap: 12px;
+    margin-bottom: 27px;
+  }
+  .featured-icon {
+    width: 43px;
+    height: 43px;
+  }
+  .featured-concert h3 {
+    font-size: 16px;
+  }
+  .featured-concert > div:nth-child(2) {
+    flex: 1;
+    min-width: 0;
+  }
+  .featured-price {
+    width: 100%;
+    justify-content: flex-end;
+    font-size: 13px;
+  }
+  .afisha .section-heading {
+    gap: 15px;
+    align-items: flex-end;
+  }
+  .afisha .section-heading h2 {
+    font-size: 23px;
+  }
+  .afisha-sort select {
+    max-width: 145px;
+    font-size: 10px;
+    padding: 3px;
+  }
+  .afisha-grid {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+  .afisha-poster {
+    height: 315px;
+  }
+  .poster-lettering strong {
+    font-size: 35px;
+  }
+  .afisha-benefits {
+    grid-template-columns: 1fr;
+    gap: 23px;
+    margin: 35px 0;
+  }
+  .afisha-benefits svg {
+    display: inline-block;
+    vertical-align: middle;
+    margin: 0 12px 0 0;
+  }
+  .afisha-benefits p {
+    margin-left: 37px;
+  }
+  .afisha-footer {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .afisha-footer > span {
+    width: 100%;
+    order: 3;
+  }
+  .community-library {
+    padding: 17px;
+  }
+  .library-grid {
+    grid-template-columns: 1fr;
+    gap: 17px;
+  }
+  .venue-list {
+    max-height: 240px;
+  }
+  .library-intro h3 {
+    font-size: 14px;
+  }
+  .library-intro p {
+    line-height: 1.6;
+  }
+  .library-preview {
+    padding: 6px;
+  }
+  .event-library-callout,
+  .organizer-summary {
+    flex-wrap: wrap;
+    padding: 20px;
+  }
+  .organizer-shortcuts {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-filters {
+    flex-direction: column;
+    padding: 14px;
+  }
+  .dashboard-filters select {
+    max-width: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .afisha-card {
+    transition: none;
+  }
+}
+.editor-presets {
+  font-size: 11px;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.editor-presets summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #8261be;
+}
+
+.afisha {
+  padding: 30px 24px 50px;
+  max-width: 1288px;
+}
+@media (max-width: 650px) {
+  .afisha {
+    padding: 25px 18px 35px;
+  }
+}

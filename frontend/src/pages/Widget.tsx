@@ -14,7 +14,16 @@ import { SeatMap } from '../components/SeatMap'
 import { Countdown, TicketCard } from '../components/Tickets'
 import { Loading, Notice } from '../components/ui'
 import { errorText, labels } from '../constants'
-import { date, money, newId, type Concert, type Order, type Stock } from '../types'
+import {
+  date,
+  levelOf,
+  levelsOf,
+  money,
+  newId,
+  type Concert,
+  type Order,
+  type Stock,
+} from '../types'
 
 export function Widget() {
   const { slug } = useParams(),
@@ -264,7 +273,9 @@ export function Widget() {
               seats.map((s) => (
                 <div className="checkout-item" key={s.id}>
                   <div>
-                    <strong>{s.section}</strong>
+                    <strong>
+                      {levelsOf(layout).find((l) => l.id === levelOf(s))?.name} · {s.section}
+                    </strong>
                     <p>
                       Ряд {s.row} · Место {s.number}
                       {s.accessible ? ' · ♿' : ''}

@@ -39,7 +39,7 @@ test('organizer draws a hall, publishes concert; buyer reserves, pays and receiv
   await page.getByRole('button', { name: 'Сохранить черновик' }).click()
   await expect(page.getByText(title, { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Опубликовать', exact: true }).click()
-  await expect(page.getByText('В продаже', { exact: true })).toBeVisible()
+  await expect(page.locator('.event-row .badge.green')).toBeVisible()
   const widgetLink = await page.getByRole('link', { name: 'Открыть виджет' }).getAttribute('href')
   await page.getByRole('button', { name: 'Выйти', exact: true }).click()
   await page.goto('/login?mode=register')
@@ -47,7 +47,8 @@ test('organizer draws a hall, publishes concert; buyer reserves, pays and receiv
   await page.getByLabel('Email', { exact: true }).fill(buyerEmail)
   await page.getByLabel('Пароль', { exact: true }).fill('BrowserTestPassword123!')
   await page.getByRole('button', { name: 'Зарегистрироваться' }).click()
-  await expect(page.getByRole('heading', { name: 'Мои билеты' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Афиша.' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Начать продажи' })).toHaveCount(0)
   await page.goto(widgetLink!)
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
   expect(

@@ -65,7 +65,22 @@ def create_app(settings=None):
 
     @app.post("/internal/events", dependencies=[Depends(rt.internal)])
     def initialize(body: Initialize):
-        digest = fingerprint(json.dumps(body.layout.model_dump(), sort_keys=True))
+        snapshot = body.layout.model_dump()
+        # Preserve fingerprints created before optional geometry extensions existed.
+        if snapshot["levels"] == [{"id": "ground", "name": "Партер"}]:
+            snapshot.pop("levels")
+        if not snapshot["objects"]:
+            snapshot.pop("objects")
+        for shape in [snapshot["stage"], *snapshot.get("objects", [])]:
+            for key, default in (("shape", "rect"), ("rotation", 0), ("level_id", "ground"), ("points", [])):
+                if shape.get(key) == default:
+                    shape.pop(key)
+        for seat in snapshot["seats"]:
+            if seat["level_id"] == "ground":
+                seat.pop("level_id")
+            if seat["rotation"] == 0:
+                seat.pop("rotation")
+        digest = fingerprint(json.dumps(snapshot, sort_keys=True))
         with rt.transaction() as conn:
             created = ensure(
                 conn,
@@ -89,6 +104,7 @@ def create_app(settings=None):
                         "number": s.number,
                         "category": categories[s.category_id].name,
                         "accessible": s.accessible,
+                        "level": next(level.name for level in body.layout.levels if level.id == s.level_id),
                     },
                     "state": "blocked" if s.blocked else "available",
                 }

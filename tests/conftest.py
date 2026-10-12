@@ -28,13 +28,20 @@ def platform(tmp_path):
                     conn.exec_driver_sql(f'CREATE DATABASE "{dbname}"')
                 databases.append(dbname)
                 database_url = str(admin.url.set(database=dbname).render_as_string(hide_password=False))
-                # Apply the actual immutable initial migration SQL, not metadata.create_all.
-                migration = importlib.import_module("migrations.versions.0001_initial")
-                engine = create_engine(database_url)
-                with engine.begin() as conn:
-                    for sql in migration.SCHEMAS[name]:
-                        conn.exec_driver_sql(sql)
-                engine.dispose()
+                from alembic import command
+                from alembic.config import Config
+
+                config = Config("alembic.ini")
+                config.attributes.update(service_name=name, database_url=database_url)
+                previous_service = os.environ.get("SERVICE_NAME")
+                os.environ["SERVICE_NAME"] = name
+                try:
+                    command.upgrade(config, "head")
+                finally:
+                    if previous_service is None:
+                        os.environ.pop("SERVICE_NAME", None)
+                    else:
+                        os.environ["SERVICE_NAME"] = previous_service
             settings = Settings(
                 _env_file=None,
                 jwt_secret="test-jwt-" + "x" * 40,

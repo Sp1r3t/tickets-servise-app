@@ -31,9 +31,6 @@ export function Shell({ children }: { children: ReactNode }) {
         </Link>
         <span className="topbar-tag">Билетная платформа</span>
         <div className="spacer" />
-        <Link className="topbar-link" to="/">
-          Купить билеты
-        </Link>
         {user ? (
           <>
             <Link className="user-link" to={user.role === 'organizer' ? '/organizer' : '/account'}>
@@ -53,9 +50,14 @@ export function Shell({ children }: { children: ReactNode }) {
             </button>
           </>
         ) : (
-          <Link className="button secondary" to="/login">
-            Войти
-          </Link>
+          <div className="header-auth">
+            <Link className="button secondary" to="/login">
+              Войти
+            </Link>
+            <Link className="button primary" to="/login?mode=register">
+              Зарегистрироваться
+            </Link>
+          </div>
         )}
       </header>
       <div className={isOrganizer ? 'app-layout' : ''}>
