@@ -253,3 +253,83 @@ def test_exact_ellipse_collision_and_rotation():
     x1, y1, x2, y2 = ellipse_bounds(shape)
     assert abs((x2 - x1) / 2 - hypot(400 * cos(angle), 60 * sin(angle))) < 1e-8
     assert x1 < x2 and y1 < y2
+
+
+def test_object_variants_survive_publication_and_old_objects_can_retry(platform, accounts, concert):
+    import json
+    from sqlalchemy import select
+    from services.common.core import fingerprint
+    from services.inventory.app import event_stock
+
+    catalog = platform["clients"]["catalog"]
+    layout = deepcopy(concert["layout"])
+    layout["objects"] = [
+        {
+            "id": "stairs",
+            "kind": "stairs",
+            "variant": "spiral",
+            "shape": "ellipse",
+            "x": 60,
+            "y": 350,
+            "width": 100,
+            "height": 100,
+            "label": "Лестница",
+            "color": "#dce3ef",
+            "blocks_seats": True,
+        },
+        {
+            "id": "bar",
+            "kind": "bar",
+            "x": 760,
+            "y": 350,
+            "width": 180,
+            "height": 80,
+            "label": "Бар",
+            "color": "#e8d9ef",
+            "blocks_seats": True,
+        },
+    ]
+    hall = catalog.post("/halls", headers=accounts["seller"], json={"name": "Объекты", "layout": layout})
+    assert hall.status_code == 201, hall.text
+    event = catalog.post(
+        "/organizer/events",
+        headers=accounts["seller"],
+        json={**concert["details"], "hall_id": hall.json()["id"]},
+    ).json()
+    assert (
+        catalog.post(f"/organizer/events/{event['id']}/publish", headers=accounts["seller"]).status_code
+        == 200
+    )
+    snapshot = catalog.get(f"/widgets/{event['slug']}").json()["layout"]
+    assert snapshot["objects"][0]["variant"] == "spiral"
+    assert snapshot["objects"][1]["variant"] == "plain"
+    legacy = deepcopy(snapshot)
+    legacy.pop("levels")
+    for shape in [legacy["stage"], *legacy["objects"], *legacy["seats"]]:
+        for key, default in (
+            ("level_id", "ground"),
+            ("rotation", 0),
+            ("shape", "rect"),
+            ("points", []),
+            ("variant", "plain"),
+        ):
+            if shape.get(key) == default:
+                shape.pop(key)
+    rt = platform["apps"]["inventory"].state.runtime
+    with rt.engine.connect() as conn:
+        row = conn.execute(select(event_stock).where(event_stock.c.event_id == event["id"])).mappings().one()
+    assert row["snapshot_hash"] == fingerprint(json.dumps(legacy, sort_keys=True))
+    assert platform["call"](
+        "inventory",
+        "POST",
+        "/internal/events",
+        {"event_id": event["id"], "layout": legacy, "sales_end": row["sales_end"]},
+    )["ok"]
+    # Visual style cannot change the geometry rules or existing published snapshots.
+    layout["objects"][0]["variant"] = "unknown"
+    assert (
+        catalog.post(
+            "/halls", headers=accounts["seller"], json={"name": "Ошибка", "layout": layout}
+        ).status_code
+        == 422
+    )

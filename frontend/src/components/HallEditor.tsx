@@ -12,8 +12,19 @@ import {
   Upload,
   ZoomIn,
   ZoomOut,
+  Layers,
+  Shapes,
+  Ticket,
+  LayoutTemplate,
+  Magnet,
+  Eye,
+  EyeOff,
+  FlipHorizontal2,
+  FlipVertical2,
+  ListOrdered,
+  HelpCircle,
 } from 'lucide-react'
-import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { api, post, useAuth } from '../api'
 import {
   emptyLayout,
@@ -27,9 +38,19 @@ import {
   type Seat,
   type Point,
 } from '../types'
-import { hallPreset } from '../hallPresets'
-import { ShapeGlyph } from './HallGeometry'
-import { LevelTools, ObjectTools, RowTools, ShapeInspector } from './EditorTools'
+import { hallPreset, presetCatalog } from '../hallPresets'
+import { ShapeGlyph, GhostLevels } from './HallGeometry'
+import {
+  LevelTools,
+  ObjectTools,
+  ObjectInspector,
+  EmptyInspector,
+  ToolSection,
+  RowTools,
+  ShapeInspector,
+  transformRows,
+  rowBend,
+} from './EditorTools'
 
 export function HallEditor({
   hall,
@@ -58,6 +79,10 @@ export function HallEditor({
   const [past, setPast] = useState<Layout[]>([])
   const [future, setFuture] = useState<Layout[]>([])
   const [zoom, setZoom] = useState(1)
+  const [tab, setTab] = useState('add')
+  const [snap, setSnap] = useState(true)
+  const [ghosts, setGhosts] = useState(true)
+  const rowPreview = useRef<Layout | null>(null)
   const [tool, setTool] = useState<'select' | 'seat' | 'stage-outline' | 'object-outline'>('select')
   const [level, setLevel] = useState(levelsOf(layout)[0].id)
   const [activeObject, setActiveObject] = useState<string | null>(null)
@@ -93,6 +118,7 @@ export function HallEditor({
     moving: boolean
     objectId?: string
     vertex?: number
+    bend?: boolean
   } | null>(null)
   const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
 
@@ -123,7 +149,21 @@ export function HallEditor({
     return () => window.removeEventListener('beforeunload', beforeUnload)
   }, [dirty])
 
+  function commitPreview() {
+    if (!rowPreview.current) return
+    const before = rowPreview.current
+    setPast((p) => [...p.slice(-49), before])
+    rowPreview.current = null
+    setFuture([])
+  }
+  function preview(next: Layout) {
+    if (!rowPreview.current) rowPreview.current = structuredClone(layout)
+    setLayout(next)
+    setDirty(true)
+    setMessage('')
+  }
   function change(next: Layout) {
+    commitPreview()
     setPast((p) => [...p.slice(-49), structuredClone(layout)])
     setFuture([])
     setLayout(next)
@@ -166,6 +206,8 @@ export function HallEditor({
     }
     if (e.key === 'Escape') {
       setSelected([])
+      setActiveObject(null)
+      setStageActive(false)
       setOutline([])
       setTool('select')
     }
@@ -200,6 +242,8 @@ export function HallEditor({
         })
     change({ ...layout, seats: [...layout.seats, ...seats] })
     setSelected(seats.map((s) => s.id))
+    setActiveObject(null)
+    setStageActive(false)
     setRowStart(rowStart + rows)
   }
   function point(e: PointerEvent) {
@@ -249,6 +293,7 @@ export function HallEditor({
   function start(e: PointerEvent, id?: string, stage = false, objectId?: string, vertex?: number) {
     if (e.button !== 0) return
     e.stopPropagation()
+    svg.current?.focus({ preventScroll: true })
     const p = point(e)
     if (tool.endsWith('outline')) {
       if (outline.length >= 64) {
@@ -256,8 +301,12 @@ export function HallEditor({
         return
       }
       const next = {
-        x: Math.round(Math.max(0, Math.min(layout.width, p.x)) / 5) * 5,
-        y: Math.round(Math.max(0, Math.min(layout.height, p.y)) / 5) * 5,
+        x: snap
+          ? Math.round(Math.max(0, Math.min(layout.width, p.x)) / 5) * 5
+          : Math.max(0, Math.min(layout.width, p.x)),
+        y: snap
+          ? Math.round(Math.max(0, Math.min(layout.height, p.y)) / 5) * 5
+          : Math.max(0, Math.min(layout.height, p.y)),
       }
       if (!outline.some((q) => q.x === next.x && q.y === next.y)) setOutline([...outline, next])
       return
@@ -266,8 +315,8 @@ export function HallEditor({
     setActiveObject(objectId || null)
     if (stage || objectId) setSelected([])
     if (tool === 'seat' && !id && !stage && !objectId) {
-      const x = Math.round(p.x / 10) * 10,
-        y = Math.round(p.y / 10) * 10
+      const x = snap ? Math.round(p.x / 10) * 10 : p.x,
+        y = snap ? Math.round(p.y / 10) * 10 : p.y
       if (x < 12 || y < 12 || x > layout.width - 12 || y > layout.height - 12) return
       const sameRow = layout.seats.filter(
         (s) => levelOf(s) === level && s.section === section && s.row === String(rowStart),
@@ -292,6 +341,7 @@ export function HallEditor({
       })
       return
     }
+    commitPreview()
     let ids: string[] = []
     if (id) {
       ids = e.shiftKey
@@ -321,11 +371,25 @@ export function HallEditor({
     const g = gesture.current
     if (!g) return
     const p = point(e),
-      dx = Math.round((p.x - g.x) / 10) * 10,
-      dy = Math.round((p.y - g.y) / 10) * 10
+      dx = snap ? Math.round((p.x - g.x) / 10) * 10 : p.x - g.x,
+      dy = snap ? Math.round((p.y - g.y) / 10) * 10 : p.y - g.y
     if (Math.abs(dx) + Math.abs(dy) < 5) return
     g.moving = true
-    if (g.stage || g.objectId) {
+    if (g.bend) {
+      const first = g.before.seats.find((s) => g.ids.includes(s.id))!
+      const row = g.before.seats
+        .filter(
+          (s) =>
+            s.section === first.section && s.row === first.row && levelOf(s) === levelOf(first),
+        )
+        .sort((a, b) => a.number.localeCompare(b.number, 'ru', { numeric: true }))
+      const a = row[0],
+        b = row[row.length - 1],
+        angle = Math.atan2(b.y - a.y, b.x - a.x)
+      const bend =
+        (p.y + 22 - (a.y + b.y) / 2) * Math.cos(angle) - (p.x - (a.x + b.x) / 2) * Math.sin(angle)
+      setLayout(transformRows(g.before, g.ids, Math.max(-180, Math.min(180, bend)), 0))
+    } else if (g.stage || g.objectId) {
       const s = g.stage ? g.before.stage : g.before.objects!.find((o) => o.id === g.objectId)!
       let next
       if (g.vertex !== undefined) {
@@ -434,6 +498,88 @@ export function HallEditor({
     change({ ...layout, seats: [...layout.seats, ...copies] })
     setSelected(copies.map((s) => s.id))
   }
+  function mirrorSeats(axis: 'x' | 'y') {
+    const seats = layout.seats.filter((s) => selected.includes(s.id))
+    const middle =
+      (Math.min(...seats.map((s) => s[axis])) + Math.max(...seats.map((s) => s[axis]))) / 2
+    change({
+      ...layout,
+      seats: layout.seats.map((s) =>
+        selected.includes(s.id)
+          ? {
+              ...s,
+              [axis]: middle * 2 - s[axis],
+              rotation:
+                axis === 'x' ? -(s.rotation || 0) : ((180 - (s.rotation || 0) + 540) % 360) - 180,
+            }
+          : s,
+      ),
+    })
+  }
+  function renumber() {
+    const keys = new Set(
+        layout.seats
+          .filter((s) => selected.includes(s.id))
+          .map((s) => `${levelOf(s)}|${s.section}|${s.row}`),
+      ),
+      numbers = new Map<string, string>()
+    for (const key of keys)
+      layout.seats
+        .filter((s) => `${levelOf(s)}|${s.section}|${s.row}` === key)
+        .sort((a, b) => a.x - b.x || a.y - b.y)
+        .forEach((s, i) => numbers.set(s.id, String(i + 1)))
+    change({
+      ...layout,
+      seats: layout.seats.map((s) =>
+        numbers.has(s.id) ? { ...s, number: numbers.get(s.id)! } : s,
+      ),
+    })
+  }
+  function addTableSeats(id: string) {
+    const o = layout.objects!.find((o) => o.id === id)!,
+      radius = Math.hypot(o.width, o.height) / 2 + 32,
+      row = String(
+        Math.max(
+          0,
+          ...layout.seats
+            .filter((s) => s.section === 'Столы' && levelOf(s) === level)
+            .map((s) => Number(s.row) || 0),
+        ) + 1,
+      )
+    const seats = Array.from({ length: 4 }, (_, i) => {
+      const a = (i * Math.PI) / 2
+      return {
+        id: newId(),
+        x: o.x + o.width / 2 + Math.cos(a) * radius,
+        y: o.y + o.height / 2 + Math.sin(a) * radius,
+        row,
+        number: String(i + 1),
+        section: 'Столы',
+        category_id: category,
+        accessible: false,
+        blocked: false,
+        level_id: level,
+        rotation: (a * 180) / Math.PI - 90,
+      }
+    })
+    if (
+      seats.some((s) => s.x < 12 || s.y < 12 || s.x > layout.width - 12 || s.y > layout.height - 12)
+    ) {
+      setMessage('Переместите стол дальше от края, чтобы вокруг него поместились места.')
+      return
+    }
+    if (
+      seats.some((s) =>
+        layout.seats.some((q) => levelOf(q) === level && Math.hypot(s.x - q.x, s.y - q.y) < 24),
+      )
+    ) {
+      setMessage('Вокруг стола уже есть места. Переместите стол или существующие места.')
+      return
+    }
+    change({ ...layout, seats: [...layout.seats, ...seats] })
+    setSelected(seats.map((s) => s.id))
+    setActiveObject(null)
+  }
   function exportLayout() {
     const url = URL.createObjectURL(
       new Blob([JSON.stringify({ name, layout }, null, 2)], { type: 'application/json' }),
@@ -523,202 +669,268 @@ export function HallEditor({
         </div>
       )}
       <div className="editor-grid">
-        <aside className="editor-panel">
-          <div className="eyebrow">КОНСТРУКТОР ЗАЛА</div>
-          {!savedHall && (
-            <details className="editor-presets">
-              <summary>Начать с готовой основы</summary>
-              <p className="small muted">Заменит текущую схему. Действие можно отменить.</p>
-              {(
-                [
-                  ['theatre', 'Театр с балконами'],
-                  ['club', 'Клуб и VIP-столы'],
-                  ['arena', 'Арена с трибунами'],
-                ] as const
-              ).map(([kind, title]) => (
-                <button
-                  key={kind}
-                  className="button secondary full"
-                  onClick={() => {
-                    const next = hallPreset(kind)
-                    change(next)
-                    setCategory(next.categories[0].id)
-                    chooseLevel('ground')
-                    setRowStart(
-                      Math.max(
-                        ...next.seats
-                          .filter((s) => levelOf(s) === 'ground')
-                          .map((s) => Number(s.row)),
-                      ) + 1,
-                    )
-                  }}
-                >
-                  {title}
-                </button>
-              ))}
-            </details>
-          )}
-          <LevelTools layout={layout} change={change} level={level} setLevel={chooseLevel} />
-          <h3>Добавить ряды</h3>
-          <label>
-            Сектор
-            <input value={section} maxLength={80} onChange={(e) => setSection(e.target.value)} />
-          </label>
-          <div className="form-grid">
-            <label>
-              Рядов
-              <input
-                type="number"
-                min="1"
-                max="20"
-                value={rows}
-                onChange={(e) => setRows(Math.max(1, Math.min(20, Number(e.target.value))))}
-              />
-            </label>
-            <label>
-              Мест в ряду
-              <input
-                type="number"
-                min="1"
-                max="40"
-                value={columns}
-                onChange={(e) => setColumns(Math.max(1, Math.min(40, Number(e.target.value))))}
-              />
-            </label>
-          </div>
-          <label>
-            Начиная с ряда
-            <input
-              type="number"
-              min="1"
-              max="999"
-              value={rowStart}
-              onChange={(e) => setRowStart(Math.max(1, Math.min(999, Number(e.target.value))))}
-            />
-          </label>
-          <label>
-            Категория
-            <select value={category} onChange={(e) => setCategory(e.target.value)}>
-              {layout.categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button className="button primary full" onClick={addBlock}>
-            <Grid3X3 size={16} />
-            Добавить блок рядов
-          </button>
-          <hr />
-          <RowTools layout={layout} change={change} selected={selected} />
-          <ObjectTools
-            layout={layout}
-            change={change}
-            level={level}
-            active={activeObject}
-            setActive={(id) => {
-              setActiveObject(id)
-              setStageActive(false)
-            }}
-            onDraw={() => {
-              setTool('object-outline')
-              setOutline([])
-            }}
-          />
-          <h3>Ценовые категории</h3>
-          {layout.categories.map((c) => (
-            <div key={c.id} className="category-edit">
-              <input
-                aria-label={`Цвет ${c.name}`}
-                type="color"
-                value={c.color}
-                onChange={(e) =>
-                  change({
-                    ...layout,
-                    categories: layout.categories.map((x) =>
-                      x.id === c.id ? { ...x, color: e.target.value } : x,
-                    ),
-                  })
-                }
-              />
-              <div>
-                <input
-                  aria-label="Название категории"
-                  value={c.name}
-                  maxLength={80}
-                  onChange={(e) =>
-                    change({
-                      ...layout,
-                      categories: layout.categories.map((x) =>
-                        x.id === c.id ? { ...x, name: e.target.value } : x,
-                      ),
-                    })
-                  }
-                />
-                <div className="price-input">
+        <aside className="editor-panel tool-library">
+          <div className="eyebrow">ИНСТРУМЕНТЫ</div>
+          <nav className="editor-tool-tabs" aria-label="Разделы редактора">
+            {[
+              { id: 'add', name: 'Добавить', icon: Shapes },
+              { id: 'levels', name: 'Уровни', icon: Layers },
+              { id: 'prices', name: 'Цены', icon: Ticket },
+              { id: 'presets', name: 'Основы', icon: LayoutTemplate },
+            ].map((t) => (
+              <button
+                key={t.id}
+                aria-label={t.name}
+                title={t.name}
+                className={tab === t.id ? 'active' : ''}
+                onClick={() => setTab(t.id)}
+              >
+                <t.icon size={18} />
+                <span>{t.name}</span>
+              </button>
+            ))}
+          </nav>
+          {tab === 'add' && (
+            <>
+              <ToolSection title="Ряды и места" open>
+                <label>
+                  Сектор
                   <input
-                    aria-label={`Цена ${c.name}`}
+                    value={section}
+                    maxLength={80}
+                    onChange={(e) => setSection(e.target.value)}
+                  />
+                </label>
+                <div className="form-grid">
+                  <label>
+                    Рядов
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={rows}
+                      onChange={(e) => setRows(Math.max(1, Math.min(20, Number(e.target.value))))}
+                    />
+                  </label>
+                  <label>
+                    Мест в ряду
+                    <input
+                      type="number"
+                      min="1"
+                      max="40"
+                      value={columns}
+                      onChange={(e) =>
+                        setColumns(Math.max(1, Math.min(40, Number(e.target.value))))
+                      }
+                    />
+                  </label>
+                </div>
+                <label>
+                  Начиная с ряда
+                  <input
                     type="number"
                     min="1"
-                    step="1"
-                    value={c.price / 100}
+                    max="999"
+                    value={rowStart}
+                    onChange={(e) =>
+                      setRowStart(Math.max(1, Math.min(999, Number(e.target.value))))
+                    }
+                  />
+                </label>
+                <label>
+                  Категория
+                  <select value={category} onChange={(e) => setCategory(e.target.value)}>
+                    {layout.categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button className="button primary full" onClick={addBlock}>
+                  <Grid3X3 size={16} />
+                  Добавить блок рядов
+                </button>
+              </ToolSection>
+
+              <ToolSection title="Объекты и зоны">
+                <ObjectTools
+                  layout={layout}
+                  change={change}
+                  level={level}
+                  setActive={(id) => {
+                    setActiveObject(id)
+                    setStageActive(false)
+                    setSelected([])
+                  }}
+                />
+              </ToolSection>
+              <button
+                className="button secondary full"
+                onClick={() => {
+                  chooseLevel(levelOf(layout.stage))
+                  setStageActive(true)
+                }}
+              >
+                <Shapes size={16} />
+                Выбрать сцену
+              </button>
+              <p className="tool-hint">Формы и размеры сцены меняются справа после выбора.</p>
+            </>
+          )}
+          {tab === 'levels' && (
+            <LevelTools layout={layout} change={change} level={level} setLevel={chooseLevel} />
+          )}
+          {tab === 'prices' && (
+            <>
+              <h3>Ценовые категории</h3>
+              {layout.categories.map((c) => (
+                <div key={c.id} className="category-edit">
+                  <input
+                    aria-label={`Цвет ${c.name}`}
+                    type="color"
+                    value={c.color}
                     onChange={(e) =>
                       change({
                         ...layout,
                         categories: layout.categories.map((x) =>
-                          x.id === c.id
-                            ? { ...x, price: Math.round(Number(e.target.value) * 100) }
-                            : x,
+                          x.id === c.id ? { ...x, color: e.target.value } : x,
                         ),
                       })
                     }
                   />
-                  <span>₽</span>
+                  <div>
+                    <input
+                      aria-label="Название категории"
+                      value={c.name}
+                      maxLength={80}
+                      onChange={(e) =>
+                        change({
+                          ...layout,
+                          categories: layout.categories.map((x) =>
+                            x.id === c.id ? { ...x, name: e.target.value } : x,
+                          ),
+                        })
+                      }
+                    />
+                    <div className="price-input">
+                      <input
+                        aria-label={`Цена ${c.name}`}
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={c.price / 100}
+                        onChange={(e) =>
+                          change({
+                            ...layout,
+                            categories: layout.categories.map((x) =>
+                              x.id === c.id
+                                ? { ...x, price: Math.round(Number(e.target.value) * 100) }
+                                : x,
+                            ),
+                          })
+                        }
+                      />
+                      <span>₽</span>
+                    </div>
+                  </div>
                 </div>
+              ))}
+              <button
+                className="text-button"
+                disabled={layout.categories.length >= 20}
+                onClick={() =>
+                  change({
+                    ...layout,
+                    categories: [
+                      ...layout.categories,
+                      { id: newId(), name: 'Новая категория', color: '#46a89b', price: 150000 },
+                    ],
+                  })
+                }
+              >
+                <Plus size={15} />
+                Категория
+              </button>
+            </>
+          )}
+          {tab === 'presets' && (
+            <>
+              <h3>Готовые основы</h3>
+              <p className="tool-hint">Заменяют текущий план. Изменение можно отменить.</p>
+              <div className="preset-gallery">
+                {presetCatalog.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      const next = hallPreset(p.id)
+                      change(next)
+                      setCategory(next.categories[0].id)
+                      chooseLevel('ground')
+                      setRowStart(
+                        Math.max(
+                          0,
+                          ...next.seats
+                            .filter((s) => levelOf(s) === 'ground')
+                            .map((s) => Number(s.row) || 0),
+                        ) + 1,
+                      )
+                    }}
+                  >
+                    <svg viewBox="0 0 1600 1100" aria-hidden="true">
+                      <PresetPreview kind={p.id} />
+                    </svg>
+                    <strong>{p.name}</strong>
+                    <small>{p.description}</small>
+                  </button>
+                ))}
               </div>
-            </div>
-          ))}
-          <button
-            className="text-button"
-            disabled={layout.categories.length >= 20}
-            onClick={() =>
-              change({
-                ...layout,
-                categories: [
-                  ...layout.categories,
-                  { id: newId(), name: 'Новая категория', color: '#46a89b', price: 150000 },
-                ],
-              })
-            }
-          >
-            <Plus size={15} />
-            Категория
-          </button>
-          <hr />
-          <button className="text-button" onClick={() => file.current?.click()}>
-            <Upload size={15} />
-            Импорт JSON
-          </button>
-          <input
-            ref={file}
-            type="file"
-            accept=".json"
-            hidden
-            onChange={(e) => {
-              if (e.target.files?.[0]) void importLayout(e.target.files[0])
-              e.target.value = ''
-            }}
-          />
-          <p className="small muted">
-            Автосохранение черновика в этом браузере. Кнопка «Сохранить зал» проверяет схему и
-            отправляет её на сервер.
-          </p>
+              <button className="text-button" onClick={() => file.current?.click()}>
+                <Upload size={15} />
+                Импорт JSON
+              </button>
+              <input
+                ref={file}
+                type="file"
+                accept=".json"
+                hidden
+                onChange={(e) => {
+                  if (e.target.files?.[0]) void importLayout(e.target.files[0])
+                  e.target.value = ''
+                }}
+              />
+            </>
+          )}
+          <details className="editor-help">
+            <summary>
+              <HelpCircle size={16} />
+              Как работать
+            </summary>
+            <p>1. Добавьте ряды или готовую основу.</p>
+            <p>2. Выберите объект — настройки справа.</p>
+            <p>3. Номер ряда выделяет ряд. Потяните ручку, чтобы его изогнуть.</p>
+            <p>
+              Shift + клик — несколько мест.
+              <br />
+              Delete — удалить места.
+              <br />
+              ⌘/Ctrl Z — отмена.
+              <br />
+              Enter — закончить контур.
+              <br />
+              Esc — снять выделение.
+            </p>
+            <p>
+              Черновик сохраняется в браузере. «Сохранить зал» проверяет и отправляет схему на
+              сервер.
+            </p>
+          </details>
         </aside>
         <div className="editor-canvas">
           <div className="canvas-toolbar">
             <button
               aria-label="Выделение"
+              title="Выделение"
               className={`icon-button ${tool === 'select' ? 'active' : ''}`}
               onClick={() => setTool('select')}
             >
@@ -726,6 +938,7 @@ export function HallEditor({
             </button>
             <button
               aria-label="Добавить одно место"
+              title="Добавить одно место"
               className={`icon-button ${tool === 'seat' ? 'active' : ''}`}
               onClick={() => setTool('seat')}
             >
@@ -735,6 +948,7 @@ export function HallEditor({
             <button
               className="icon-button"
               aria-label="Отменить действие"
+              title="Отменить действие"
               disabled={!past.length}
               onClick={undo}
             >
@@ -743,15 +957,35 @@ export function HallEditor({
             <button
               className="icon-button"
               aria-label="Повторить действие"
+              title="Повторить действие"
               disabled={!future.length}
               onClick={redo}
             >
               <Redo2 size={18} />
             </button>
+            <button
+              className={`icon-button ${snap ? 'active' : ''}`}
+              aria-label="Привязка к сетке"
+              title="Привязка к сетке"
+              aria-pressed={snap}
+              onClick={() => setSnap(!snap)}
+            >
+              <Magnet size={18} />
+            </button>
+            <button
+              className={`icon-button ${ghosts ? 'active' : ''}`}
+              aria-label="Показывать соседние уровни"
+              title="Показывать соседние уровни"
+              aria-pressed={ghosts}
+              onClick={() => setGhosts(!ghosts)}
+            >
+              {ghosts ? <Eye size={18} /> : <EyeOff size={18} />}
+            </button>
             <div className="spacer" />
             <button
               className="icon-button"
               aria-label="Уменьшить"
+              title="Уменьшить"
               onClick={() => setZoom(Math.max(0.5, zoom - 0.25))}
             >
               <ZoomOut size={18} />
@@ -762,6 +996,7 @@ export function HallEditor({
             <button
               className="icon-button"
               aria-label="Увеличить"
+              title="Увеличить"
               onClick={() => setZoom(Math.min(3, zoom + 0.25))}
             >
               <ZoomIn size={18} />
@@ -802,6 +1037,7 @@ export function HallEditor({
           <div className="canvas-scroll">
             <svg
               ref={svg}
+              tabIndex={0}
               className="editor-svg"
               style={{ width: `${zoom * 100}%`, minWidth: `${zoom * 650}px` }}
               viewBox={`0 0 ${layout.width} ${layout.height}`}
@@ -817,6 +1053,7 @@ export function HallEditor({
                 </pattern>
               </defs>
               <rect width={layout.width} height={layout.height} fill="url(#dots)" />
+              {ghosts && <GhostLevels layout={layout} level={level} />}
               {(layout.objects || [])
                 .filter((o) => levelOf(o) === level && o.kind === 'zone')
                 .map((o) => (
@@ -862,6 +1099,8 @@ export function HallEditor({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
+                      setActiveObject(null)
+                      setStageActive(false)
                       setSelected(e.shiftKey ? [...new Set([...selected, s.id])] : [s.id])
                     }
                   }}
@@ -909,6 +1148,8 @@ export function HallEditor({
                   className="seat-interactive"
                   onPointerDown={(e) => {
                     e.stopPropagation()
+                    setStageActive(false)
+                    setActiveObject(null)
                     setSelected(
                       layout.seats
                         .filter(
@@ -925,6 +1166,69 @@ export function HallEditor({
                   {row.row}
                 </text>
               ))}
+              {selected.length > 0 &&
+                (() => {
+                  const first = layout.seats.find((s) => selected.includes(s.id))
+                  if (!first) return null
+                  const row = visibleSeats
+                    .filter((s) => s.section === first.section && s.row === first.row)
+                    .sort((a, b) => a.number.localeCompare(b.number, 'ru', { numeric: true }))
+                  if (row.length < 2) return null
+                  const a = row[0],
+                    b = row[row.length - 1],
+                    angle = Math.atan2(b.y - a.y, b.x - a.x),
+                    bend = rowBend(row),
+                    cx = (a.x + b.x) / 2 - Math.sin(angle) * bend,
+                    cy = (a.y + b.y) / 2 + Math.cos(angle) * bend
+                  return (
+                    <g>
+                      <path
+                        d={`M ${a.x} ${a.y} Q ${(a.x + b.x) / 2 - Math.sin(angle) * bend * 2} ${(a.y + b.y) / 2 + Math.cos(angle) * bend * 2} ${b.x} ${b.y}`}
+                        fill="none"
+                        stroke="#7561ef"
+                        strokeDasharray="4 4"
+                        pointerEvents="none"
+                      />
+                      <g
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Потянуть изгиб ряда"
+                        className="bend-handle"
+                        onPointerDown={(e) => {
+                          e.stopPropagation()
+                          commitPreview()
+                          const p = point(e)
+                          gesture.current = {
+                            before: structuredClone(layout),
+                            ...p,
+                            ids: selected,
+                            stage: false,
+                            moving: false,
+                            bend: true,
+                          }
+                          svg.current!.setPointerCapture(e.pointerId)
+                        }}
+                      >
+                        <circle
+                          cx={cx}
+                          cy={cy - 22}
+                          r={11}
+                          fill="white"
+                          stroke="#7561ef"
+                          strokeWidth={2}
+                        />
+                        <path
+                          d={`M ${cx - 5} ${cy - 22} Q ${cx} ${cy - 29} ${cx + 5} ${cy - 22}`}
+                          fill="none"
+                          stroke="#7561ef"
+                          strokeWidth={2}
+                        />
+                        <line x1={cx} y1={cy - 11} x2={cx} y2={cy} stroke="#7561ef" />
+                        <title>Потяните ручку вверх или вниз, чтобы изогнуть выбранные ряды</title>
+                      </g>
+                    </g>
+                  )
+                })()}
               {outline.length > 0 && (
                 <g pointerEvents="none">
                   <polyline
@@ -962,75 +1266,151 @@ export function HallEditor({
             <span>⌘/Ctrl Z — отмена</span>
           </div>
         </div>
-        <aside className="editor-panel inspector">
+        <aside className="editor-panel inspector" aria-label="Свойства выбранного элемента">
           <div className="eyebrow">СВОЙСТВА</div>
-          <h3>{selected.length ? `Выбрано: ${selected.length}` : 'Выберите места'}</h3>
-          {selected.length ? (
+          {selected.length > 0 && (
             <>
-              <label>
-                Категория
-                <select value="" onChange={(e) => modifySeats({ category_id: e.target.value })}>
-                  <option value="" disabled>
-                    Назначить категорию
-                  </option>
-                  {layout.categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} · {money(c.price)}
+              <h3>Места · {selected.length}</h3>
+              <RowTools
+                key={selected.join('|')}
+                layout={layout}
+                change={change}
+                selected={selected}
+                preview={preview}
+                commit={commitPreview}
+              />
+              <ToolSection title="Билет и нумерация" open>
+                <label>
+                  Категория
+                  <select
+                    value={
+                      new Set(
+                        layout.seats
+                          .filter((s) => selected.includes(s.id))
+                          .map((s) => s.category_id),
+                      ).size === 1
+                        ? layout.seats.find((s) => selected.includes(s.id))!.category_id
+                        : ''
+                    }
+                    onChange={(e) => modifySeats({ category_id: e.target.value })}
+                  >
+                    <option value="" disabled>
+                      Назначить категорию
                     </option>
-                  ))}
-                </select>
-              </label>
-              {selected.length === 1 &&
-                (() => {
-                  const seat = layout.seats.find((s) => s.id === selected[0])
-                  return seat ? (
-                    <>
-                      <label>
-                        Сектор
-                        <input
-                          value={seat.section}
-                          onChange={(e) => modifySeats({ section: e.target.value })}
-                        />
-                      </label>
+                    {layout.categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} · {money(c.price)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {selected.length === 1 &&
+                  (() => {
+                    const seat = layout.seats.find((s) => s.id === selected[0])
+                    return seat ? (
+                      <>
+                        <label>
+                          Сектор
+                          <input
+                            value={seat.section}
+                            onChange={(e) => modifySeats({ section: e.target.value })}
+                          />
+                        </label>
+                        <div className="form-grid">
+                          <label>
+                            Ряд
+                            <input
+                              value={seat.row}
+                              onChange={(e) => modifySeats({ row: e.target.value })}
+                            />
+                          </label>
+                          <label>
+                            Место
+                            <input
+                              value={seat.number}
+                              onChange={(e) => modifySeats({ number: e.target.value })}
+                            />
+                          </label>
+                        </div>
+                      </>
+                    ) : null
+                  })()}
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={layout.seats
+                      .filter((s) => selected.includes(s.id))
+                      .every((s) => s.accessible)}
+                    onChange={(e) => modifySeats({ accessible: e.target.checked })}
+                  />
+                  Доступные места
+                </label>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={layout.seats
+                      .filter((s) => selected.includes(s.id))
+                      .every((s) => s.blocked)}
+                    onChange={(e) => modifySeats({ blocked: e.target.checked })}
+                  />
+                  Не продавать
+                </label>
+              </ToolSection>
+              <ToolSection title="Расположение и порядок">
+                {selected.length === 1 &&
+                  (() => {
+                    const seat = layout.seats.find((s) => s.id === selected[0])
+                    return seat ? (
                       <div className="form-grid">
-                        <label>
-                          Ряд
-                          <input
-                            value={seat.row}
-                            onChange={(e) => modifySeats({ row: e.target.value })}
-                          />
-                        </label>
-                        <label>
-                          Место
-                          <input
-                            value={seat.number}
-                            onChange={(e) => modifySeats({ number: e.target.value })}
-                          />
-                        </label>
+                        {(['x', 'y', 'rotation'] as const).map((k) => (
+                          <label key={k}>
+                            {{ x: 'X места', y: 'Y места', rotation: 'Поворот места, °' }[k]}
+                            <input
+                              type="number"
+                              min={k === 'rotation' ? -360 : 12}
+                              max={
+                                k === 'rotation'
+                                  ? 360
+                                  : k === 'x'
+                                    ? layout.width - 12
+                                    : layout.height - 12
+                              }
+                              value={seat[k] || 0}
+                              onChange={(e) => modifySeats({ [k]: Number(e.target.value) })}
+                            />
+                          </label>
+                        ))}
                       </div>
-                    </>
-                  ) : null
-                })()}
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={layout.seats
-                    .filter((s) => selected.includes(s.id))
-                    .every((s) => s.accessible)}
-                  onChange={(e) => modifySeats({ accessible: e.target.checked })}
-                />
-                Доступные места
-              </label>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={layout.seats
-                    .filter((s) => selected.includes(s.id))
-                    .every((s) => s.blocked)}
-                  onChange={(e) => modifySeats({ blocked: e.target.checked })}
-                />
-                Не продавать
-              </label>
+                    ) : null
+                  })()}
+
+                <div className="segmented-actions">
+                  <button
+                    className="button secondary small"
+                    title="Отразить по горизонтали"
+                    aria-label="Отразить места по горизонтали"
+                    onClick={() => mirrorSeats('x')}
+                  >
+                    <FlipHorizontal2 size={18} />
+                  </button>
+                  <button
+                    className="button secondary small"
+                    title="Отразить по вертикали"
+                    aria-label="Отразить места по вертикали"
+                    onClick={() => mirrorSeats('y')}
+                  >
+                    <FlipVertical2 size={18} />
+                  </button>
+                  <button
+                    className="button secondary small"
+                    title="Нумеровать места слева направо"
+                    onClick={renumber}
+                  >
+                    <ListOrdered size={18} />
+                    Нумерация
+                  </button>
+                </div>
+              </ToolSection>
               <button className="button secondary full" onClick={duplicate}>
                 <Copy size={16} />
                 Дублировать
@@ -1040,29 +1420,93 @@ export function HallEditor({
                 Удалить
               </button>
             </>
-          ) : (
-            <p className="muted small">
-              Выделение позволяет назначить цену всему ряду или сектору сразу.
-            </p>
           )}
-          <hr />
-          <ShapeInspector
-            shape={layout.stage}
-            label="Сцена"
-            onChange={(stage) => change({ ...layout, stage })}
-            onDraw={() => {
-              chooseLevel(levelOf(layout.stage))
-              setTool('stage-outline')
-              setOutline([])
-            }}
-          />
-          <hr />
-          <div className="small muted">
-            При сохранении проверяются пересечения, границы, нумерация и цены. Опубликованные
-            концерты используют отдельную копию этой схемы.
-          </div>
+
+          {stageActive && (
+            <ShapeInspector
+              shape={layout.stage}
+              label="Сцена"
+              onChange={(stage) => change({ ...layout, stage })}
+              onDraw={() => {
+                setTool('stage-outline')
+                setOutline([])
+              }}
+            />
+          )}
+          {activeObject &&
+            (() => {
+              const object = layout.objects?.find((o) => o.id === activeObject)
+              return object ? (
+                <>
+                  <ObjectInspector
+                    object={object}
+                    patch={(o) =>
+                      change({
+                        ...layout,
+                        objects: layout.objects?.map((x) => (x.id === o.id ? o : x)),
+                      })
+                    }
+                    onDraw={() => {
+                      setTool('object-outline')
+                      setOutline([])
+                    }}
+                    onDelete={() => {
+                      change({
+                        ...layout,
+                        objects: layout.objects?.filter((o) => o.id !== activeObject),
+                      })
+                      setActiveObject(null)
+                    }}
+                    onCopy={() => {
+                      const id = newId()
+                      change({
+                        ...layout,
+                        objects: [
+                          ...(layout.objects || []),
+                          {
+                            ...object,
+                            id,
+                            x: object.x + object.width + 30,
+                            label: object.label + ' · копия',
+                          },
+                        ],
+                      })
+                      setActiveObject(id)
+                    }}
+                  />
+                  {object.kind === 'table' && (
+                    <button
+                      className="button secondary full"
+                      onClick={() => addTableSeats(object.id)}
+                    >
+                      Добавить 4 места вокруг стола
+                    </button>
+                  )}
+                </>
+              ) : null
+            })()}
+          {!selected.length && !stageActive && !activeObject && <EmptyInspector />}
         </aside>
       </div>
     </div>
+  )
+}
+
+function PresetPreview({ kind }: { kind: Parameters<typeof hallPreset>[0] }) {
+  const layout = useMemo(() => hallPreset(kind), [kind])
+  return (
+    <>
+      <ShapeGlyph shape={layout.stage} />
+      {layout.objects
+        ?.filter((o) => levelOf(o) === 'ground')
+        .map((o) => (
+          <ShapeGlyph key={o.id} shape={o} color={o.color} />
+        ))}
+      {layout.seats
+        .filter((s) => levelOf(s) === 'ground')
+        .map((s) => (
+          <circle key={s.id} cx={s.x} cy={s.y} r={10} fill="#7561ef" />
+        ))}
+    </>
   )
 }

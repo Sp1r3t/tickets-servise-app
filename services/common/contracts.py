@@ -69,6 +69,9 @@ class HallObject(Shape):
     kind: Literal["zone", "table", "bar", "column", "stairs", "entrance", "technical", "decoration"] = "zone"
     color: str = Field(default="#dce3ef", pattern=r"^#[0-9a-fA-F]{6}$")
     blocks_seats: bool = False
+    variant: Literal[
+        "plain", "straight", "corner", "double", "spiral", "island", "round", "square", "long"
+    ] = "plain"
 
 
 class Level(StrictModel):

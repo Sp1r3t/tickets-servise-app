@@ -36,6 +36,8 @@ test('audience discovery and complex hall library work across organizer accounts
   await page.getByLabel('Название зала', { exact: true }).fill(`Зал ${suffix}`)
   await page.getByRole('button', { name: 'Уменьшить', exact: true }).click()
   await page.getByRole('button', { name: 'Уменьшить', exact: true }).click()
+  await expect(page.locator('.inspector input')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Выбрать сцену', exact: true }).click()
   await page.getByRole('button', { name: 'Нарисовать свой контур', exact: true }).click()
   const canvas = page.locator('.editor-svg')
   await canvas.scrollIntoViewIfNeeded()
@@ -59,10 +61,19 @@ test('audience discovery and complex hall library work across organizer accounts
   await page.getByRole('button', { name: 'Добавить блок рядов' }).click()
   await page.getByLabel('Изгиб ряда', { exact: true }).fill('24')
   await page.getByLabel('Поворот рядов, °', { exact: true }).fill('5')
-  await page.getByRole('button', { name: 'Применить к рядам' }).click()
-  await page.getByRole('combobox', { name: 'Тип объекта', exact: true }).selectOption('column')
-  await page.getByRole('button', { name: 'Добавить объект', exact: true }).click()
+  await page.locator('.tool-library').getByText('Объекты и зоны', { exact: true }).click()
+  await page.getByRole('button', { name: 'Добавить: Колонна', exact: true }).click()
+  await page.getByRole('button', { name: 'Добавить: Лестница', exact: true }).click()
+  await expect(page.locator('.tool-library').getByLabel('Надпись')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Вариант: С поворотом', exact: true }).click()
+  await expect(page.locator('.editor-svg [data-object-kind=stairs]')).toHaveAttribute(
+    'data-variant',
+    'corner',
+  )
+  await page.getByRole('button', { name: 'Уровни', exact: true }).click()
   await page.getByRole('button', { name: 'Добавить балкон / ярус' }).click()
+  await expect(page.locator('.editor-svg [data-level-ghost=true] circle')).toHaveCount(24)
+  await page.getByRole('button', { name: 'Добавить', exact: true }).click()
   await page.getByLabel('Рядов', { exact: true }).fill('1')
   await page.getByLabel('Мест в ряду', { exact: true }).fill('4')
   await page.getByLabel('Начиная с ряда', { exact: true }).fill('1')
@@ -76,6 +87,8 @@ test('audience discovery and complex hall library work across organizer accounts
   expect(savedLayout.stage.points).toHaveLength(6)
   expect(savedLayout.levels).toHaveLength(2)
   expect(savedLayout.objects[0].kind).toBe('column')
+  expect(savedLayout.objects[1].variant).toBe('corner')
+  expect(savedLayout.objects[1].shape).toBe('polygon')
   expect(savedLayout.seats.filter((s: { rotation?: number }) => s.rotation)).toHaveLength(24)
   await expect(page.getByText('Схема сохранена на сервере.', { exact: false })).toBeVisible()
   await page.goto('/organizer/events/new')
@@ -128,6 +141,7 @@ test('audience discovery and complex hall library work across organizer accounts
   ).toBeTruthy()
   await page.goto(widget!)
   await page.getByRole('button', { name: 'Балкон 1', exact: true }).click()
+  await expect(page.locator('.seat-map [data-level-ghost=true] circle')).toHaveCount(24)
   await page
     .getByRole('button', {
       name: 'Балкон 1, Партер, ряд 1, место 1, Стандарт, свободно',

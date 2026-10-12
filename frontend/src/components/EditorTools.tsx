@@ -1,18 +1,25 @@
-import { useState } from 'react'
-import { Layers, Plus, RotateCw, Trash2 } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { Layers, Plus, Copy, Trash2, MousePointer2 } from 'lucide-react'
 import { levelOf, levelsOf, newId, type HallObject, type Layout, type Shape } from '../types'
+import { objectNames, shapePresets, variants, withForm, withVariant } from '../editorShapes'
+import { ObjectSymbol, ShapeGlyph } from './HallGeometry'
 
-export const objectNames: Record<HallObject['kind'], string> = {
-  zone: 'Зона / танцпол',
-  table: 'Стол',
-  bar: 'Бар',
-  column: 'Колонна',
-  stairs: 'Лестница',
-  entrance: 'Вход',
-  technical: 'Техническая зона',
-  decoration: 'Свободный объект',
+export function ToolSection({
+  title,
+  children,
+  open = false,
+}: {
+  title: string
+  children: ReactNode
+  open?: boolean
+}) {
+  return (
+    <details className="tool-section" open={open || undefined}>
+      <summary>{title}</summary>
+      <div className="tool-section-content">{children}</div>
+    </details>
+  )
 }
-
 export function transformRows(
   layout: Layout,
   selected: string[],
@@ -70,16 +77,19 @@ export function LevelTools({
       <h3>
         <Layers size={16} /> Уровни зала
       </h3>
-      <label>
-        Рабочий уровень
-        <select value={current.id} onChange={(e) => setLevel(e.target.value)}>
-          {levels.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="level-list">
+        {levels.map((l) => (
+          <button
+            key={l.id}
+            className={current.id === l.id ? 'active' : ''}
+            onClick={() => setLevel(l.id)}
+          >
+            <Layers size={16} />
+            <span>{l.name}</span>
+            <small>{layout.seats.filter((s) => levelOf(s) === l.id).length}</small>
+          </button>
+        ))}
+      </div>
       <label>
         Название уровня
         <input
@@ -94,7 +104,7 @@ export function LevelTools({
         />
       </label>
       <button
-        className="text-button"
+        className="button secondary full"
         disabled={levels.length >= 12}
         onClick={() => {
           const id = newId()
@@ -120,28 +130,72 @@ export function LevelTools({
           Удалить пустой уровень
         </button>
       )}
-      <p className="small muted">
-        Каждый ярус — отдельный слой. Места на разных этажах могут находиться друг над другом.
+      <p className="tool-hint">
+        Соседние этажи видны бледным цветом. Редактируется только выбранный уровень.
       </p>
-      <hr />
     </>
   )
 }
-
+export function rowBend(seats: Layout['seats']): number {
+  if (seats.length < 3) return 0
+  const row = [...seats].sort((a, b) => a.number.localeCompare(b.number, 'ru', { numeric: true })),
+    first = row[0],
+    last = row[row.length - 1],
+    middle = row[Math.floor(row.length / 2)],
+    a = Math.atan2(last.y - first.y, last.x - first.x),
+    t = Math.floor(row.length / 2) / (row.length - 1)
+  return (
+    ((middle.y - (first.y + last.y) / 2) * Math.cos(a) -
+      (middle.x - (first.x + last.x) / 2) * Math.sin(a)) /
+    (1 - (2 * t - 1) ** 2)
+  )
+}
 export function RowTools({
   layout,
   change,
   selected,
+  preview,
+  commit,
 }: {
   layout: Layout
   change: (l: Layout) => void
   selected: string[]
+  preview: (l: Layout) => void
+  commit: () => void
 }) {
-  const [bend, setBend] = useState(0),
-    [rotation, setRotation] = useState(0)
+  const first = layout.seats.find((s) => selected.includes(s.id))
+  const row = first
+    ? layout.seats.filter(
+        (s) => levelOf(s) === levelOf(first) && s.section === first.section && s.row === first.row,
+      )
+    : []
+  const bend = Math.round(rowBend(row))
+  const [rotation, setRotation] = useState(0)
   return (
-    <>
-      <h3>Геометрия рядов</h3>
+    <ToolSection title="Изгиб и направление" open>
+      <div className="bend-preview">
+        <svg viewBox="0 0 180 55" aria-hidden="true">
+          <path
+            d={`M 12 20 Q 90 ${20 + bend / 5} 168 20`}
+            fill="none"
+            stroke="#7561ef"
+            strokeWidth="3"
+          />
+          {Array.from({ length: 9 }, (_, i) => {
+            const t = i / 8
+            return (
+              <circle
+                key={i}
+                cx={12 + t * 156}
+                cy={20 + (bend / 10) * (1 - (2 * t - 1) ** 2)}
+                r={4}
+                fill="#7561ef"
+              />
+            )
+          })}
+        </svg>
+        <span>{bend === 0 ? 'Прямой ряд' : bend > 0 ? 'Дуга от сцены' : 'Дуга к сцене'}</span>
+      </div>
       <label>
         Изгиб ряда
         <input
@@ -150,10 +204,26 @@ export function RowTools({
           min={-180}
           max={180}
           value={bend}
-          onChange={(e) => setBend(Number(e.target.value))}
+          onChange={(e) => preview(transformRows(layout, selected, Number(e.target.value), 0))}
+          onPointerUp={commit}
+          onKeyUp={commit}
+          onBlur={commit}
         />
-        <span className="small muted">{bend} — от прямого ряда до дуги</span>
       </label>
+      <div className="range-captions">
+        <span>К сцене</span>
+        <button
+          className="text-button"
+          onClick={() => change(transformRows(layout, selected, 0, 0))}
+        >
+          Выпрямить
+        </button>
+        <span>От сцены</span>
+      </div>
+      <p className="tool-hint">
+        Потяните фиолетовую ручку на плане или двигайте ползунок — дуга меняется сразу. Меняются
+        целые ряды.
+      </p>
       <label>
         Поворот рядов, °
         <input
@@ -161,26 +231,28 @@ export function RowTools({
           min={-180}
           max={180}
           value={rotation}
-          onChange={(e) => setRotation(Math.max(-180, Math.min(180, Number(e.target.value))))}
+          onChange={(e) => {
+            const next = Math.max(-180, Math.min(180, Number(e.target.value)))
+            change(transformRows(layout, selected, bend, next - rotation))
+            setRotation(next)
+          }}
         />
       </label>
-      <button
-        className="button secondary full"
-        disabled={!selected.length}
-        onClick={() => change(transformRows(layout, selected, bend, rotation))}
-      >
-        <RotateCw size={16} />
-        Применить к рядам
-      </button>
-      <p className="small muted">
-        Выберите места или номер ряда. Меняется весь ряд, ID и номера сохраняются. Поворот
-        добавляется к текущему направлению; изгиб задаётся заново.
-      </p>
-      <hr />
-    </>
+      <div className="segmented-actions">
+        {[-15, 15].map((angle) => (
+          <button
+            key={angle}
+            className="button secondary small"
+            onClick={() => change(transformRows(layout, selected, bend, angle))}
+          >
+            {angle > 0 ? '+' : ''}
+            {angle}°
+          </button>
+        ))}
+      </div>
+    </ToolSection>
   )
 }
-
 export function ShapeInspector({
   shape,
   onChange,
@@ -203,215 +275,286 @@ export function ShapeInspector({
           onChange={(e) => onChange({ ...shape, label: e.target.value })}
         />
       </label>
-      <label>
-        Форма
-        <select
-          value={shape.shape || 'rect'}
-          onChange={(e) => {
-            const value = e.target.value as Shape['shape']
-            onChange({
-              ...shape,
-              shape: value,
-              points:
-                value === 'polygon'
-                  ? [
-                      { x: 0, y: 0 },
-                      { x: 1, y: 0 },
-                      { x: 1, y: 1 },
-                      { x: 0.6, y: 1 },
-                      { x: 0.6, y: 0.6 },
-                      { x: 0, y: 0.6 },
-                    ]
-                  : [],
-            })
-          }}
-        >
-          <option value="rect">Прямоугольник</option>
-          <option value="ellipse">Эллипс / круг</option>
-          <option value="polygon">Свободный контур</option>
-        </select>
-      </label>
-      <button className="text-button" onClick={onDraw}>
-        Нарисовать свой контур
-      </button>
-      <button
-        className="text-button"
-        onClick={() =>
-          onChange({
-            ...shape,
-            shape: 'polygon',
-            points: [
-              { x: 0, y: 0 },
-              { x: 1, y: 0 },
-              ...Array.from({ length: 15 }, (_, i) => {
-                const a = ((i + 1) * Math.PI) / 16
-                return { x: 0.5 + 0.5 * Math.cos(a), y: Math.sin(a) }
-              }),
-            ],
-          })
-        }
-      >
-        Сцена полукругом
-      </button>
-      <div className="form-grid">
-        {(['x', 'y', 'width', 'height', 'rotation'] as const).map((k) => (
-          <label key={k}>
-            {{ x: 'X', y: 'Y', width: 'Ширина', height: 'Высота', rotation: 'Поворот, °' }[k]}
-            <input
-              type="number"
-              step={k === 'rotation' ? 5 : 10}
-              min={k === 'rotation' ? -360 : k === 'width' || k === 'height' ? 10 : 0}
-              max={k === 'rotation' ? 360 : 2000}
-              value={shape[k] || 0}
-              onChange={(e) => onChange({ ...shape, [k]: Number(e.target.value) })}
-            />
-          </label>
-        ))}
-      </div>
-      {shape.shape === 'polygon' && (
-        <p className="small muted">
-          Выберите контур на схеме и перетащите белые вершины. Размеры изменяют весь контур.
-        </p>
-      )}
+      <ToolSection title="Форма и контур" open>
+        <div className="shape-palette">
+          {shapePresets.map((p) => (
+            <button
+              key={p.id}
+              title={p.name}
+              aria-label={`Форма: ${p.name}`}
+              onClick={() => onChange(withForm(shape, p.id))}
+            >
+              <svg viewBox="0 0 50 38" aria-hidden="true">
+                <ShapeGlyph
+                  shape={{
+                    x: 4,
+                    y: 4,
+                    width: 42,
+                    height: 30,
+                    label: '',
+                    shape: p.shape,
+                    points: p.points,
+                  }}
+                  color="#e9e4fb"
+                />
+              </svg>
+              <span>{p.name}</span>
+            </button>
+          ))}
+        </div>
+        <button className="button secondary full" onClick={onDraw}>
+          Нарисовать свой контур
+        </button>
+        {shape.shape === 'polygon' && (
+          <p className="tool-hint">
+            Белые точки на плане — вершины. Перетаскивайте их, чтобы менять контур.
+          </p>
+        )}
+      </ToolSection>
+      <ToolSection title="Размер и положение">
+        <div className="form-grid">
+          {(['x', 'y', 'width', 'height', 'rotation'] as const).map((k) => (
+            <label key={k}>
+              {{ x: 'X', y: 'Y', width: 'Ширина', height: 'Высота', rotation: 'Поворот, °' }[k]}
+              <input
+                type="number"
+                step={k === 'rotation' ? 5 : 10}
+                min={
+                  k === 'rotation'
+                    ? -360
+                    : k === 'width'
+                      ? label === 'Сцена'
+                        ? 60
+                        : 10
+                      : k === 'height'
+                        ? label === 'Сцена'
+                          ? 30
+                          : 10
+                        : 0
+                }
+                max={k === 'rotation' ? 360 : k === 'height' ? 1500 : 2000}
+                value={shape[k] || 0}
+                onChange={(e) => onChange({ ...shape, [k]: Number(e.target.value) })}
+              />
+            </label>
+          ))}
+        </div>
+      </ToolSection>
     </>
   )
 }
-
 export function ObjectTools({
   layout,
   change,
   level,
-  active,
   setActive,
-  onDraw,
 }: {
   layout: Layout
   change: (l: Layout) => void
   level: string
-  active: string | null
   setActive: (id: string | null) => void
-  onDraw: () => void
 }) {
-  const [kind, setKind] = useState<HallObject['kind']>('zone')
-  const object = layout.objects?.find((o) => o.id === active)
-  function patch(shape: Shape) {
-    if (object)
-      change({
-        ...layout,
-        objects: layout.objects?.map((o) => (o.id === object.id ? { ...o, ...shape } : o)),
-      })
+  function add(kind: HallObject['kind']) {
+    const id = newId(),
+      small = ['column', 'table'].includes(kind)
+    let o: HallObject = {
+      id,
+      kind,
+      label: objectNames[kind],
+      x: 80,
+      y: kind === 'table' ? 240 : 40,
+      width: small ? 60 : 160,
+      height: small ? 60 : 100,
+      shape: small ? 'ellipse' : 'rect',
+      level_id: level,
+      color:
+        kind === 'bar'
+          ? '#e8d9ef'
+          : kind === 'table'
+            ? '#eee3d3'
+            : kind === 'entrance'
+              ? '#dcefe7'
+              : kind === 'zone'
+                ? '#eef0fc'
+                : '#dce3ef',
+      blocks_seats: ['column', 'stairs', 'bar', 'technical', 'table'].includes(kind),
+    }
+    // Keep new objects away from existing seating; reserve space for a table's chairs.
+    const padding = kind === 'table' ? 70 : 14
+    const occupied = [
+      ...(levelOf(layout.stage) === level ? [layout.stage] : []),
+      ...(layout.objects || []).filter((x) => levelOf(x) === level && x.kind !== 'zone'),
+    ]
+    let placed = false
+    for (let y = 40; y <= layout.height - o.height - padding && !placed; y += 40) {
+      for (let x = 40; x <= layout.width - o.width - padding; x += 40) {
+        const left = x - padding,
+          right = x + o.width + padding,
+          top = y - padding,
+          bottom = y + o.height + padding
+        if (
+          left < 12 ||
+          top < 12 ||
+          occupied.some(
+            (q) => left < q.x + q.width && right > q.x && top < q.y + q.height && bottom > q.y,
+          ) ||
+          layout.seats.some(
+            (s) =>
+              levelOf(s) === level &&
+              s.x > left - 12 &&
+              s.x < right + 12 &&
+              s.y > top - 12 &&
+              s.y < bottom + 12,
+          )
+        )
+          continue
+        o = { ...o, x, y }
+        placed = true
+        break
+      }
+    }
+    const v = variants[kind]?.[0]
+    if (v) o = withVariant(o, v.id)
+    change({ ...layout, objects: [...(layout.objects || []), o] })
+    setActive(id)
   }
   return (
     <>
-      <h3>Объекты и зоны</h3>
-      <label>
-        Тип объекта
-        <select value={kind} onChange={(e) => setKind(e.target.value as HallObject['kind'])}>
-          {Object.entries(objectNames).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button
-        className="button secondary full"
-        disabled={(layout.objects?.length || 0) >= 200}
-        onClick={() => {
-          const id = newId()
-          change({
-            ...layout,
-            objects: [
-              ...(layout.objects || []),
-              {
-                id,
-                kind,
-                label: objectNames[kind],
-                x: 80,
-                y: 40,
-                width: kind === 'column' ? 40 : 120,
-                height: kind === 'column' ? 40 : 70,
-                shape: ['column', 'table'].includes(kind) ? 'ellipse' : 'rect',
-                level_id: level,
-                color: kind === 'zone' ? '#eef0fc' : '#dce3ef',
-                blocks_seats: ['column', 'stairs', 'bar', 'technical'].includes(kind),
-              },
-            ],
-          })
-          setActive(id)
-        }}
-      >
-        <Plus size={16} />
-        Добавить объект
-      </button>
-      <label>
-        Объекты уровня
-        <select value={active || ''} onChange={(e) => setActive(e.target.value || null)}>
-          <option value="">Выберите объект</option>
+      <p className="tool-hint">
+        Добавьте объект, затем выберите его на плане. Варианты и параметры появятся справа.
+      </p>
+      <div className="object-palette">
+        {Object.entries(objectNames).map(([kind, name]) => (
+          <button
+            key={kind}
+            disabled={(layout.objects?.length || 0) >= 200}
+            onClick={() => add(kind as HallObject['kind'])}
+            aria-label={`Добавить: ${name}`}
+          >
+            <ObjectSymbol kind={kind as HallObject['kind']} />
+            <span>{name}</span>
+          </button>
+        ))}
+      </div>
+      <ToolSection title="Объекты на уровне">
+        <div className="object-list">
           {layout.objects
             ?.filter((o) => levelOf(o) === level)
             .map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
+              <button key={o.id} onClick={() => setActive(o.id)}>
+                <ObjectSymbol kind={o.kind} />
+                <span>{o.label}</span>
+              </button>
             ))}
-        </select>
-      </label>
-      {object && (
-        <>
-          <ShapeInspector
-            shape={object}
-            label="Свойства объекта"
-            onChange={patch}
-            onDraw={onDraw}
-          />
-          <label>
-            Цвет объекта
-            <input
-              type="color"
-              value={object.color}
-              onChange={(e) =>
-                change({
-                  ...layout,
-                  objects: layout.objects?.map((o) =>
-                    o.id === object.id ? { ...o, color: e.target.value } : o,
-                  ),
-                })
-              }
-            />
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={object.blocks_seats}
-              onChange={(e) =>
-                change({
-                  ...layout,
-                  objects: layout.objects?.map((o) =>
-                    o.id === object.id ? { ...o, blocks_seats: e.target.checked } : o,
-                  ),
-                })
-              }
-            />
-            Препятствие для мест
-          </label>
-          <button
-            className="button danger full"
-            onClick={() => {
-              change({ ...layout, objects: layout.objects?.filter((o) => o.id !== object.id) })
-              setActive(null)
-            }}
-          >
-            <Trash2 size={16} />
-            Удалить объект
-          </button>
-        </>
-      )}
-      <p className="small muted">
-        Зоны служат подложкой. Для колонн, баров и технических объектов можно запретить пересечение
-        с местами. Столы сами по себе не являются билетами.
-      </p>
-      <hr />
+          {!layout.objects?.some((o) => levelOf(o) === level) && (
+            <p className="tool-hint">Пока пусто</p>
+          )}
+        </div>
+      </ToolSection>
     </>
+  )
+}
+export function ObjectInspector({
+  object,
+  patch,
+  onDraw,
+  onDelete,
+  onCopy,
+}: {
+  object: HallObject
+  patch: (o: HallObject) => void
+  onDraw: () => void
+  onDelete: () => void
+  onCopy: () => void
+}) {
+  const options = variants[object.kind]
+  return (
+    <>
+      <div className="inspector-heading">
+        <ObjectSymbol kind={object.kind} />
+        <span>{objectNames[object.kind]}</span>
+      </div>
+      {options && (
+        <ToolSection title="Вариант оформления" open>
+          <div className="variant-palette">
+            {options.map((v) => (
+              <button
+                key={v.id}
+                aria-label={`Вариант: ${v.name}`}
+                className={object.variant === v.id ? 'active' : ''}
+                onClick={() => patch(withVariant(object, v.id))}
+              >
+                <svg viewBox="0 0 100 74">
+                  <ShapeGlyph
+                    shape={{
+                      ...withVariant(object, v.id),
+                      x: 5,
+                      y: 5,
+                      width: 90,
+                      height: 64,
+                      label: '',
+                      rotation: 0,
+                    }}
+                    color={object.color}
+                  />
+                </svg>
+                <span>{v.name}</span>
+              </button>
+            ))}
+          </div>
+        </ToolSection>
+      )}
+      <ShapeInspector
+        shape={object}
+        label="Объект"
+        onChange={(s) => patch({ ...object, ...s })}
+        onDraw={onDraw}
+      />
+      <ToolSection title="Цвет и поведение">
+        <label>
+          Цвет объекта
+          <input
+            type="color"
+            value={object.color}
+            onChange={(e) => patch({ ...object, color: e.target.value })}
+          />
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={object.blocks_seats}
+            onChange={(e) => patch({ ...object, blocks_seats: e.target.checked })}
+          />
+          Препятствие для мест
+        </label>
+        <p className="tool-hint">
+          Стол или танцпол — часть плана. Продаются только добавленные места.
+        </p>
+      </ToolSection>
+      <div className="segmented-actions">
+        <button className="button secondary small" onClick={onCopy}>
+          <Copy size={16} />
+          Копия
+        </button>
+        <button className="button danger small" onClick={onDelete}>
+          <Trash2 size={16} />
+          Удалить
+        </button>
+      </div>
+    </>
+  )
+}
+export function EmptyInspector() {
+  return (
+    <div className="empty-inspector">
+      <MousePointer2 size={32} />
+      <strong>Ничего не выбрано</strong>
+      <p>Нажмите на место, сцену или объект. Здесь появятся его параметры.</p>
+      <small>
+        Номер ряда выделяет весь ряд.
+        <br />
+        Shift + клик добавляет места к выделению.
+      </small>
+    </div>
   )
 }

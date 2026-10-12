@@ -72,7 +72,13 @@ def create_app(settings=None):
         if not snapshot["objects"]:
             snapshot.pop("objects")
         for shape in [snapshot["stage"], *snapshot.get("objects", [])]:
-            for key, default in (("shape", "rect"), ("rotation", 0), ("level_id", "ground"), ("points", [])):
+            for key, default in (
+                ("shape", "rect"),
+                ("rotation", 0),
+                ("level_id", "ground"),
+                ("points", []),
+                ("variant", "plain"),
+            ):
                 if shape.get(key) == default:
                     shape.pop(key)
         for seat in snapshot["seats"]:

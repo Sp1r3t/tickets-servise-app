@@ -2861,3 +2861,356 @@ a:focus-visible {
     font-size: 36px;
   }
 }
+
+/* Focused floor-plan workspace: creation on the left, selection on the right. */
+.editor-grid {
+  grid-template-columns: 250px minmax(0, 1fr) 270px;
+  align-items: start;
+  gap: 14px;
+}
+.editor-panel {
+  padding: 16px;
+  max-height: calc(100vh - 160px);
+  overflow: auto;
+}
+.editor-tool-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+  margin: 14px -7px 18px;
+}
+.editor-tool-tabs button {
+  border: 0;
+  background: transparent;
+  color: #8390a5;
+  border-radius: 10px;
+  padding: 9px 0;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 5px;
+  cursor: pointer;
+}
+.editor-tool-tabs button span {
+  font-size: 10px;
+  font-weight: 650;
+}
+.editor-tool-tabs button.active {
+  background: #eee9fd;
+  color: #7058d6;
+}
+.tool-section {
+  border-bottom: 1px solid #edf0f6;
+  margin-bottom: 12px;
+}
+.tool-section > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+  padding: 12px 17px 12px 0;
+  position: relative;
+  list-style: none;
+}
+.tool-section > summary::-webkit-details-marker {
+  display: none;
+}
+.tool-section > summary::after {
+  content: '+';
+  position: absolute;
+  right: 1px;
+  color: #8a91a4;
+}
+.tool-section[open] > summary::after {
+  content: '−';
+}
+.tool-section-content {
+  padding-bottom: 15px;
+}
+.tool-hint {
+  font-size: 11px;
+  line-height: 1.65;
+  color: #8a93a5;
+  margin: 8px 0 13px;
+}
+.object-palette,
+.shape-palette,
+.variant-palette {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 12px;
+}
+.object-palette button,
+.shape-palette button,
+.variant-palette button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+  padding: 11px 6px;
+  border: 1px solid #e9edf4;
+  background: #fafbfe;
+  border-radius: 10px;
+  cursor: pointer;
+  color: #657089;
+  min-width: 0;
+}
+.object-palette button:hover,
+.shape-palette button:hover,
+.variant-palette button:hover,
+.variant-palette button.active {
+  border-color: #a493ea;
+  background: #f3eefe;
+  color: #7058d6;
+}
+.object-palette button span,
+.shape-palette button span,
+.variant-palette button span {
+  font-size: 10px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.shape-palette {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.shape-palette svg {
+  width: 45px;
+  height: 35px;
+}
+.variant-palette svg {
+  width: 100%;
+  height: 65px;
+}
+.inspector-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 8px;
+  font-size: 16px;
+  font-weight: 750;
+}
+.empty-inspector {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  flex-direction: column;
+  gap: 16px;
+  padding: 50px 10px;
+  color: #97a0b2;
+}
+.empty-inspector strong {
+  font-size: 14px;
+  color: #657089;
+}
+.empty-inspector p {
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 0;
+}
+.empty-inspector small {
+  font-size: 10px;
+  line-height: 1.8;
+}
+.bend-preview {
+  border: 1px solid #ece8f8;
+  border-radius: 10px;
+  background: #faf8ff;
+  padding: 7px;
+  text-align: center;
+}
+.bend-preview svg {
+  width: 100%;
+  height: 55px;
+}
+.bend-preview span {
+  font-size: 10px;
+  color: #7058d6;
+}
+.range-captions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 9px;
+  color: #929bad;
+  gap: 3px;
+}
+.range-captions .text-button {
+  font-size: 10px;
+}
+.segmented-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+.segmented-actions .button {
+  margin: 0;
+  flex: 1;
+  padding: 8px;
+  min-width: 0;
+  font-size: 11px;
+}
+.level-list,
+.object-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+.level-list button,
+.object-list button {
+  border: 1px solid #ebedf4;
+  border-radius: 8px;
+  background: #fafbfe;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+  color: #6c778d;
+}
+.level-list button.active {
+  background: #f1ecfd;
+  border-color: #b7a9ec;
+  color: #7058d6;
+}
+.level-list small {
+  margin-left: auto;
+}
+.object-list svg {
+  width: 17px;
+  flex-shrink: 0;
+}
+.preset-gallery {
+  display: grid;
+  gap: 10px;
+  margin: 15px 0;
+}
+.preset-gallery button {
+  border: 1px solid #e4e9f1;
+  background: #fff;
+  border-radius: 12px;
+  cursor: pointer;
+  padding: 10px;
+  text-align: left;
+}
+.preset-gallery button:hover {
+  border-color: #9c8cde;
+}
+.preset-gallery svg {
+  display: block;
+  width: 100%;
+  height: 115px;
+  background: #fafbfe;
+  border-radius: 7px;
+  margin-bottom: 10px;
+}
+.preset-gallery strong,
+.preset-gallery small {
+  display: block;
+}
+.preset-gallery strong {
+  font-size: 12px;
+  color: #505b72;
+}
+.preset-gallery small {
+  font-size: 10px;
+  color: #96a0b1;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.editor-help {
+  border-top: 1px solid #edf0f6;
+  padding-top: 14px;
+  margin-top: 20px;
+}
+.editor-help summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #8b94a6;
+}
+.editor-help p {
+  font-size: 11px;
+  line-height: 1.8;
+  color: #8993a7;
+}
+.bend-handle {
+  cursor: ns-resize;
+}
+.canvas-toolbar {
+  flex-wrap: wrap;
+}
+@media (max-width: 1250px) {
+  .editor-grid {
+    grid-template-columns: 220px minmax(0, 1fr) 240px;
+  }
+  .editor-panel {
+    padding: 12px;
+  }
+}
+@media (max-width: 1100px) {
+  .editor-grid {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .editor-panel.inspector {
+    grid-column: 2;
+    max-height: none;
+  }
+  .editor-canvas {
+    position: static;
+  }
+  .tool-library {
+    grid-row: 1 / span 2;
+  }
+}
+@media (max-width: 650px) {
+  .editor-grid {
+    display: flex;
+    flex-direction: column;
+  }
+  .editor-panel,
+  .editor-canvas {
+    width: 100%;
+    max-height: none;
+  }
+  .editor-panel.inspector {
+    order: 2;
+  }
+  .tool-library {
+    order: 3;
+  }
+  .editor-canvas {
+    order: 1;
+  }
+  .editor-tool-tabs button span {
+    font-size: 12px;
+  }
+  .preset-gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .canvas-toolbar {
+    gap: 3px;
+  }
+  .canvas-toolbar .icon-button {
+    width: 30px;
+  }
+}
+@media (min-width: 1101px) {
+  .app-layout:has(.editor) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-layout:has(.editor) > .sidebar {
+    display: none;
+  }
+  .workspace-main:has(.editor) {
+    width: 100%;
+    max-width: none;
+    padding: 30px 40px;
+  }
+}

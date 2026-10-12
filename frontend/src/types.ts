@@ -30,6 +30,16 @@ export type HallObject = Shape & {
   kind: 'zone' | 'table' | 'bar' | 'column' | 'stairs' | 'entrance' | 'technical' | 'decoration'
   color: string
   blocks_seats: boolean
+  variant?:
+    | 'plain'
+    | 'straight'
+    | 'corner'
+    | 'double'
+    | 'spiral'
+    | 'island'
+    | 'round'
+    | 'square'
+    | 'long'
 }
 export type Layout = {
   width: number

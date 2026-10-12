@@ -1,7 +1,19 @@
 import { emptyLayout, newId, type Layout, type Seat } from './types'
 
+export const presetCatalog = [
+  { id: 'theatre', name: 'Театр с балконами', description: 'Изогнутые ряды · три уровня' },
+  { id: 'club', name: 'Клуб и VIP-столы', description: 'Свободный танцпол · бар · балкон' },
+  { id: 'arena', name: 'Арена с трибунами', description: 'Трибуны вокруг центрального партера' },
+  { id: 'cinema', name: 'Кинозал', description: 'Прямые ряды · центральный проход' },
+  { id: 'jazz', name: 'Джаз-клуб', description: 'Камерная сцена · круглые столы' },
+  { id: 'banquet', name: 'Банкетный зал', description: 'Столы на шесть мест · большой зал' },
+  { id: 'runway', name: 'Сцена-подиум', description: 'Зрители по обе стороны сцены' },
+  { id: 'amphitheater', name: 'Открытый амфитеатр', description: 'Радиальные ряды · один уровень' },
+] as const
+export type PresetKind = (typeof presetCatalog)[number]['id']
+
 /** Editable examples inspired by hall types, not copies of third-party seating plans. */
-export function hallPreset(kind: 'theatre' | 'club' | 'arena'): Layout {
+export function hallPreset(kind: PresetKind): Layout {
   const layout = emptyLayout()
   layout.width = 1600
   layout.height = 1100
@@ -49,7 +61,7 @@ export function hallPreset(kind: 'theatre' | 'club' | 'arena'): Layout {
       accessible: false,
     }
   }
-  if (kind === 'theatre') {
+  if (kind === 'theatre' || kind === 'amphitheater') {
     layout.levels.push({ id: 'balcony-1', name: 'Балкон 1' }, { id: 'balcony-2', name: 'Балкон 2' })
     for (const [level, start, count] of [
       ['ground', 240, 10],
@@ -89,94 +101,179 @@ export function hallPreset(kind: 'theatre' | 'club' | 'arena'): Layout {
       })
     }
     layout.seats[0].accessible = true
-  } else if (kind === 'club') {
-    layout.stage = {
-      ...layout.stage,
-      x: 1090,
-      y: 360,
-      width: 360,
-      height: 250,
-      points: [
-        { x: 0.3, y: 0 },
-        { x: 1, y: 0 },
-        { x: 1, y: 1 },
-        { x: 0, y: 1 },
-        { x: 0, y: 0.4 },
-      ],
+  } else if (kind === 'club' || kind === 'jazz' || kind === 'banquet') {
+    const club = kind === 'club'
+    if (club) {
+      layout.objects.push(
+        {
+          id: newId(),
+          kind: 'zone',
+          label: 'ТАНЦПОЛ',
+          x: 460,
+          y: 250,
+          width: 680,
+          height: 530,
+          shape: 'rect',
+          color: '#f1edfc',
+          blocks_seats: false,
+        },
+        {
+          id: newId(),
+          kind: 'bar',
+          variant: 'straight',
+          label: 'БАР',
+          x: 90,
+          y: 300,
+          width: 100,
+          height: 480,
+          color: '#e6d8ed',
+          blocks_seats: true,
+          rotation: 0,
+        },
+        {
+          id: newId(),
+          kind: 'stairs',
+          variant: 'double',
+          label: 'НА БАЛКОН',
+          x: 1330,
+          y: 870,
+          width: 150,
+          height: 140,
+          color: '#dce5ef',
+          blocks_seats: true,
+        },
+        {
+          id: newId(),
+          kind: 'entrance',
+          variant: 'double',
+          label: 'ВХОД',
+          x: 100,
+          y: 910,
+          width: 160,
+          height: 110,
+          color: '#dceee5',
+          blocks_seats: false,
+        },
+      )
     }
-    layout.objects.push(
-      {
-        id: newId(),
-        kind: 'zone',
-        label: 'ТАНЦПОЛ',
-        x: 500,
-        y: 300,
-        width: 500,
-        height: 550,
-        shape: 'ellipse',
-        color: '#efedfa',
-        blocks_seats: false,
-      },
-      {
-        id: newId(),
-        kind: 'bar',
-        label: 'БАР',
-        x: 100,
-        y: 80,
-        width: 340,
-        height: 90,
-        color: '#e5d8f4',
-        blocks_seats: true,
-      },
-      {
-        id: newId(),
-        kind: 'stairs',
-        label: 'Лестница',
-        x: 1300,
-        y: 850,
-        width: 180,
-        height: 100,
-        color: '#dce5ef',
-        blocks_seats: true,
-      },
-    )
-    layout.levels.push({ id: 'vip-balcony', name: 'VIP-балкон' })
-    for (let t = 0; t < 8; t++) {
-      const angle = -1.15 + (t * 2.3) / 7,
-        x = 770 - Math.cos(angle) * 490,
-        y = 555 + Math.sin(angle) * 450
-      layout.objects.push({
+    let tableNumber = 0
+    function table(x: number, y: number, level = 'ground', count = 4) {
+      const t = ++tableNumber,
+        size = count === 6 ? 76 : 60,
+        radius = count === 6 ? 72 : 58
+      layout.objects!.push({
         id: newId(),
         kind: 'table',
-        label: `Стол ${t + 1}`,
-        x: x - 28,
-        y: y - 28,
-        width: 56,
-        height: 56,
+        variant: 'round',
+        label: `СТОЛ ${t}`,
+        x: x - size / 2,
+        y: y - size / 2,
+        width: size,
+        height: size,
         shape: 'ellipse',
-        color: '#e2d9f7',
+        color: '#eadfce',
         blocks_seats: true,
-        level_id: 'vip-balcony',
+        level_id: level,
       })
-      for (let i = 0; i < 4; i++) {
-        const a = (i * Math.PI) / 2
+      for (let i = 0; i < count; i++) {
+        const a = (i * Math.PI * 2) / count
         layout.seats.push(
           seat(
-            x + Math.cos(a) * 50,
-            y + Math.sin(a) * 50,
-            String(t + 1),
+            x + Math.cos(a) * radius,
+            y + Math.sin(a) * radius,
+            String(t),
             i + 1,
-            'VIP-столы',
-            'vip-balcony',
-            (a * 180) / Math.PI,
+            'Столы',
+            level,
+            (a * 180) / Math.PI - 90,
             premium,
           ),
         )
       }
     }
-    for (let r = 0; r < 5; r++)
-      for (let c = 0; c < 10; c++)
-        layout.seats.push(seat(560 + c * 34, 350 + r * 42, String(r + 1), c + 1, 'Партер'))
+    if (club) {
+      for (const x of [330, 1270]) for (const y of [320, 530, 740]) table(x, y)
+      for (const x of [560, 800, 1040]) table(x, 930)
+      layout.levels.push({ id: 'vip-balcony', name: 'VIP-балкон' })
+      layout.objects.push({
+        id: newId(),
+        kind: 'zone',
+        label: 'VIP-БАЛКОН · ВИД НА СЦЕНУ',
+        x: 400,
+        y: 400,
+        width: 800,
+        height: 70,
+        color: '#eee8f8',
+        blocks_seats: false,
+        level_id: 'vip-balcony',
+      })
+      for (const x of [380, 590, 800, 1010, 1220]) table(x, 550, 'vip-balcony')
+      for (const x of [330, 1270]) for (const y of [740, 930]) table(x, y, 'vip-balcony')
+    } else {
+      for (let r = 0; r < (kind === 'banquet' ? 4 : 3); r++)
+        for (let c = 0; c < 4; c++) table(350 + c * 300, 300 + r * 225, 'ground', 6)
+      layout.objects.push({
+        id: newId(),
+        kind: 'bar',
+        variant: 'straight',
+        label: 'БАР',
+        x: 110,
+        y: 300,
+        width: 90,
+        height: 470,
+        color: '#e6d8ed',
+        blocks_seats: true,
+      })
+    }
+  } else if (kind === 'cinema') {
+    layout.stage = {
+      ...layout.stage,
+      label: 'СЦЕНА / ЭКРАН',
+      x: 350,
+      width: 900,
+      shape: 'rect',
+      points: [],
+    }
+    for (let r = 0; r < 12; r++)
+      for (let side = 0; side < 2; side++)
+        for (let c = 0; c < 12; c++)
+          layout.seats.push(
+            seat(
+              350 + side * 500 + c * 34,
+              280 + r * 42,
+              String(r + 1),
+              side * 12 + c + 1,
+              'Партер',
+            ),
+          )
+    layout.objects.push({
+      id: newId(),
+      kind: 'entrance',
+      variant: 'double',
+      label: 'ВЫХОД',
+      x: 1240,
+      y: 890,
+      width: 160,
+      height: 110,
+      color: '#dceee5',
+      blocks_seats: false,
+    })
+  } else if (kind === 'runway') {
+    layout.stage = { x: 750, y: 170, width: 100, height: 650, label: 'ПОДИУМ', shape: 'rect' }
+    for (let side = 0; side < 2; side++)
+      for (let r = 0; r < 6; r++)
+        for (let c = 0; c < 16; c++)
+          layout.seats.push(
+            seat(
+              side ? 970 + r * 42 : 630 - r * 42,
+              230 + c * 34,
+              String(r + 1),
+              c + 1,
+              side ? 'Правая сторона' : 'Левая сторона',
+              'ground',
+              side ? 90 : -90,
+            ),
+          )
   } else {
     layout.stage = {
       ...layout.stage,
@@ -231,6 +328,11 @@ export function hallPreset(kind: 'theatre' | 'club' | 'arena'): Layout {
             premium,
           ),
         )
+  }
+  if (kind === 'amphitheater') {
+    layout.levels = [{ id: 'ground', name: 'Партер' }]
+    layout.seats = layout.seats.filter((s) => s.level_id === 'ground')
+    layout.objects = layout.objects.filter((o) => !o.level_id || o.level_id === 'ground')
   }
   return layout
 }
