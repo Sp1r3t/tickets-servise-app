@@ -22,6 +22,14 @@ test('audience discovery and complex hall library work across organizer accounts
   await page.goto('/')
   await expect(page.getByRole('link', { name: 'Зарегистрироваться', exact: true })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Купить билеты', exact: true })).toHaveCount(0)
+  const initialViewport = page.viewportSize()!
+  for (const width of [320, 375, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+    ).toBeTruthy()
+  }
+  await page.setViewportSize(initialViewport)
   await register(page, `${suffix}-one`)
   await page.goto('/organizer/halls')
   await page.getByRole('button', { name: 'Создать зал', exact: true }).click()

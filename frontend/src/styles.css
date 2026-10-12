@@ -2827,3 +2827,37 @@ a:focus-visible {
     padding: 25px 18px 35px;
   }
 }
+@media (max-width: 650px) {
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 65px;
+    padding: 12px 14px;
+    row-gap: 10px;
+  }
+  .topbar .spacer {
+    display: none;
+  }
+  .header-auth,
+  .topbar .user-link {
+    margin-left: auto;
+  }
+  .afisha .section-heading {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .afisha .section-heading > div {
+    min-width: 200px;
+    flex: 1;
+  }
+  .afisha .section-heading h2 {
+    font-size: 22px;
+    white-space: nowrap;
+  }
+  .afisha-sort {
+    margin-left: auto;
+  }
+  .discovery-copy h2 {
+    font-size: 36px;
+  }
+}
