@@ -107,7 +107,11 @@ hr {
   font-weight: 700;
   font-size: 12px;
   white-space: nowrap;
-  transition: 0.15s;
+  transition:
+    background-color 0.15s,
+    color 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 .button.primary {
   background: var(--purple);
