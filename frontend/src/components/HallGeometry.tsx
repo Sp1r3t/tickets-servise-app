@@ -279,11 +279,7 @@ export function ShapeGlyph({
           </g>
         </pattern>
       </defs>
-      <g
-        fill={color}
-        stroke={active ? '#7561ef' : style.outline_color}
-        strokeWidth={active ? 2 : style.outline_width}
-      >
+      <g fill={color} stroke={style.outline_color} strokeWidth={style.outline_width}>
         <Surface s={s} />
       </g>
       <g clipPath={`url(#${clip})`} data-clipped-content="true">
