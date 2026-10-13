@@ -56,7 +56,7 @@ test('all hall bases pass server geometry validation; contextual objects and liv
   )
   await page.locator('.inspector').getByLabel('Надпись', { exact: true }).fill('Коктейльный бар')
   await expect(
-    page.locator('.editor-svg').getByText('Коктейльный бар', { exact: true }),
+    page.locator('.editor-svg text').filter({ hasText: /^Коктейльный бар$/ }),
   ).toBeVisible()
   await page.getByRole('button', { name: 'Добавить: Стол', exact: true }).click()
   await page.getByRole('button', { name: 'Добавить 4 места вокруг стола', exact: true }).click()

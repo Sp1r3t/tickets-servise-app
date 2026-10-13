@@ -78,6 +78,7 @@ def create_app(settings=None):
                 ("level_id", "ground"),
                 ("points", []),
                 ("variant", "plain"),
+                ("appearance", None),
             ):
                 if shape.get(key) == default:
                     shape.pop(key)

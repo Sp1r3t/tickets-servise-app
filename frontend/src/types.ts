@@ -14,6 +14,22 @@ export type Seat = {
   rotation?: number
 }
 export type Point = { x: number; y: number }
+export type Appearance = {
+  pattern?: 'auto' | 'none' | 'diagonal' | 'cross' | 'dots' | 'horizontal' | 'vertical'
+  pattern_color?: string
+  pattern_spacing?: number
+  pattern_angle?: number
+  pattern_width?: number
+  outline_color?: string
+  outline_width?: number
+  label_color?: string
+  label_size?: number
+  label_visible?: boolean
+  icon_visible?: boolean
+  details_visible?: boolean
+  label_position?: Point | null
+  icon_position?: Point | null
+}
 export type Shape = {
   x: number
   y: number
@@ -24,10 +40,29 @@ export type Shape = {
   points?: Point[]
   rotation?: number
   level_id?: string
+  appearance?: Appearance | null
 }
 export type HallObject = Shape & {
   id: string
-  kind: 'zone' | 'table' | 'bar' | 'column' | 'stairs' | 'entrance' | 'technical' | 'decoration'
+  kind:
+    | 'zone'
+    | 'table'
+    | 'bar'
+    | 'column'
+    | 'stairs'
+    | 'entrance'
+    | 'technical'
+    | 'decoration'
+    | 'sofa'
+    | 'bench'
+    | 'exit'
+    | 'wc'
+    | 'cloakroom'
+    | 'lift'
+    | 'sound'
+    | 'light'
+    | 'fence'
+    | 'plant'
   color: string
   blocks_seats: boolean
   variant?:

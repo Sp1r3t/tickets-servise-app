@@ -43,3 +43,7 @@ EventInput дополнен genre: live/rock/pop/electronic/jazz/classical/other
 
 
 Объект поддерживает необязательный `variant`: plain (прежнее оформление), straight, corner, double, spiral, island, round, square, long. Это оформление, не квота и не новый продаваемый объект. Геометрия препятствия определяется `shape/points/rotation`; выбор варианта в редакторе одновременно устанавливает подходящий контур. Значение plain исключается из fingerprint для совместимости повторов прежних публикаций.
+
+Shape имеет необязательный `appearance` (null для прежнего формата). Поля: pattern = auto/none/diagonal/cross/dots/horizontal/vertical; pattern_color (hex), pattern_spacing (4–80), pattern_angle (−180…180), pattern_width (0.25–5); outline_color (hex), outline_width (0–6); label_color (hex), label_size (6–40); label_visible/icon_visible/details_visible (bool); label_position/icon_position (null или `{x,y}` в диапазоне 0–1). Позиции задаются в локальной системе фигуры и масштабируются вместе с ней. Слой оформления не заменяет shape/points/rotation, геометрия препятствия остаётся прежней.
+
+Новые kind объектов: sofa (диван), bench (скамья), exit, wc, cloakroom, lift, sound, light, fence, plant. Это совместимое расширение JSON-контракта; стол/диван/танцпол сами по себе не являются билетами. Внешний клиент должен уметь отобразить неизвестный kind как фигуру с подписью. Отсутствующий appearance удаляется при нормализации fingerprint Inventory.

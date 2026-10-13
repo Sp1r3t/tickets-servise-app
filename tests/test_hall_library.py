@@ -220,7 +220,7 @@ def test_legacy_publication_fingerprint_is_compatible(platform, concert):
     legacy.pop("objects")
     legacy.pop("levels")
     for shape in [legacy["stage"], *legacy["seats"]]:
-        for key in ("level_id", "rotation", "shape", "points"):
+        for key in ("level_id", "rotation", "shape", "points", "appearance"):
             shape.pop(key, None)
     rt = platform["apps"]["inventory"].state.runtime
     with rt.engine.connect() as conn:
@@ -312,9 +312,10 @@ def test_object_variants_survive_publication_and_old_objects_can_retry(platform,
             ("shape", "rect"),
             ("points", []),
             ("variant", "plain"),
+            ("appearance", None),
         ):
             if shape.get(key) == default:
-                shape.pop(key)
+                shape.pop(key, None)
     rt = platform["apps"]["inventory"].state.runtime
     with rt.engine.connect() as conn:
         row = conn.execute(select(event_stock).where(event_stock.c.event_id == event["id"])).mappings().one()
@@ -333,3 +334,78 @@ def test_object_variants_survive_publication_and_old_objects_can_retry(platform,
         ).status_code
         == 422
     )
+
+
+def test_furniture_appearance_is_validated_shared_and_immutable(platform, accounts, concert):
+    catalog = platform["clients"]["catalog"]
+    layout = deepcopy(concert["layout"])
+    kinds = ["sofa", "bench", "exit", "wc", "cloakroom", "lift", "sound", "light", "fence", "plant"]
+    layout["objects"] = [
+        {
+            "id": kind,
+            "kind": kind,
+            "x": 40 + i * 80,
+            "y": 450,
+            "width": 50,
+            "height": 50,
+            "label": kind,
+            "color": "#dce3ef",
+            "blocks_seats": True,
+            "appearance": {
+                "pattern": "cross",
+                "pattern_spacing": 8,
+                "pattern_angle": 30,
+                "icon_position": {"x": 0.2, "y": 0.3},
+                "label_position": {"x": 0.6, "y": 0.7},
+            },
+        }
+        for i, kind in enumerate(kinds)
+    ]
+    result = catalog.post(
+        "/halls", headers=accounts["seller"], json={"name": "Мебель и стили", "layout": layout}
+    )
+    assert result.status_code == 201, result.text
+    hall = result.json()
+    event = catalog.post(
+        "/organizer/events", headers=accounts["seller"], json={**concert["details"], "hall_id": hall["id"]}
+    ).json()
+    assert (
+        catalog.post(f"/organizer/events/{event['id']}/publish", headers=accounts["seller"]).status_code
+        == 200
+    )
+    snapshot = catalog.get(f"/widgets/{event['slug']}").json()["layout"]
+    assert len(snapshot["seats"]) == len(concert["layout"]["seats"])
+    assert [o["kind"] for o in snapshot["objects"]] == kinds
+    assert snapshot["objects"][0]["appearance"]["icon_position"] == {"x": 0.2, "y": 0.3}
+    library = catalog.get("/organizer/library", headers=accounts["other_seller"]).json()
+    template = next(t for v in library["venues"] for t in v["templates"] if t["name"] == hall["name"])
+    copied = catalog.post(
+        f"/organizer/library/{template['id']}/copy", headers=accounts["other_seller"]
+    ).json()
+    copied["layout"]["objects"][0]["appearance"]["pattern"] = "none"
+    assert (
+        catalog.put(
+            f"/halls/{copied['id']}",
+            headers=accounts["other_seller"],
+            json={"name": "Своя мебель", "layout": copied["layout"], "revision": copied["revision"]},
+        ).status_code
+        == 200
+    )
+    assert (
+        catalog.get(f"/widgets/{event['slug']}").json()["layout"]["objects"][0]["appearance"]["pattern"]
+        == "cross"
+    )
+    for invalid in [
+        {"pattern_spacing": 0},
+        {"pattern_color": "url(x)"},
+        {"icon_position": {"x": 2, "y": 0}},
+        {"pattern": "unknown"},
+    ]:
+        changed = deepcopy(layout)
+        changed["objects"][0]["appearance"].update(invalid)
+        assert (
+            catalog.post(
+                "/halls", headers=accounts["seller"], json={"name": "Ошибка", "layout": changed}
+            ).status_code
+            == 422
+        )

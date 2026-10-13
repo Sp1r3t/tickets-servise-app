@@ -23,6 +23,11 @@ import {
   FlipVertical2,
   ListOrdered,
   HelpCircle,
+  Scissors,
+  ClipboardPaste,
+  AlignCenter,
+  AlignVerticalJustifyCenter,
+  MoveUp,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { api, post, useAuth } from '../api'
@@ -37,7 +42,27 @@ import {
   type Layout,
   type Seat,
   type Point,
+  type Shape,
 } from '../types'
+import {
+  appearanceOf,
+  localPoint,
+  resizeShape,
+  moveVertex,
+  withinCanvas,
+  shapeBounds,
+  type ResizeHandle,
+} from '../editorGeometry'
+import {
+  alignLayout,
+  copySelection,
+  pasteSelection,
+  deleteSelection,
+  bringToFront,
+  selectionOnLevel,
+  type EditorClipboard,
+  type Alignment,
+} from '../editorActions'
 import { hallPreset, presetCatalog } from '../hallPresets'
 import { ShapeGlyph, GhostLevels } from './HallGeometry'
 import {
@@ -85,8 +110,18 @@ export function HallEditor({
   const rowPreview = useRef<Layout | null>(null)
   const [tool, setTool] = useState<'select' | 'seat' | 'stage-outline' | 'object-outline'>('select')
   const [level, setLevel] = useState(levelsOf(layout)[0].id)
-  const [activeObject, setActiveObject] = useState<string | null>(null)
+  const [selectedObjects, setSelectedObjects] = useState<string[]>([])
+  const activeObject = selectedObjects.length === 1 ? selectedObjects[0] : null
+  function setActiveObject(id: string | null) {
+    setSelectedObjects(id ? [id] : [])
+  }
+  const [clipboard, setClipboard] = useState<EditorClipboard | null>(null)
+  const [context, setContext] = useState<{ x: number; y: number; world: Point } | null>(null)
+  const [outlinePast, setOutlinePast] = useState<Point[][]>([])
+  const [outlineFuture, setOutlineFuture] = useState<Point[][]>([])
   const [stageActive, setStageActive] = useState(false)
+  const selection = { seats: selected, objects: selectedObjects, stage: stageActive }
+  const hasSelection = selected.length > 0 || selectedObjects.length > 0 || stageActive
   const [outline, setOutline] = useState<Point[]>([])
   const visibleSeats = layout.seats.filter((s) => levelOf(s) === level)
   function chooseLevel(id: string) {
@@ -119,9 +154,36 @@ export function HallEditor({
     objectId?: string
     vertex?: number
     bend?: boolean
+    objectIds?: string[]
+    resize?: ResizeHandle
+    decoration?: 'icon' | 'label'
   } | null>(null)
   const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
 
+  useEffect(() => {
+    setSelected((ids) =>
+      ids.every((id) => layout.seats.some((s) => s.id === id))
+        ? ids
+        : ids.filter((id) => layout.seats.some((s) => s.id === id)),
+    )
+    setSelectedObjects((ids) =>
+      ids.every((id) => layout.objects?.some((o) => o.id === id))
+        ? ids
+        : ids.filter((id) => layout.objects?.some((o) => o.id === id)),
+    )
+  }, [layout])
+  useEffect(() => {
+    if (!context) return
+    const dismiss = (e: Event) => {
+      if (!(e.target as Element).closest('.editor-context-menu')) setContext(null)
+    }
+    document.addEventListener('pointerdown', dismiss)
+    window.addEventListener('resize', dismiss)
+    return () => {
+      document.removeEventListener('pointerdown', dismiss)
+      window.removeEventListener('resize', dismiss)
+    }
+  }, [context])
   useEffect(() => {
     if (!levelsOf(layout).some((l) => l.id === level)) {
       setLevel(levelsOf(layout)[0].id)
@@ -170,7 +232,30 @@ export function HallEditor({
     setDirty(true)
     setMessage('')
   }
+  function beginOutline(kind: 'stage-outline' | 'object-outline') {
+    setTool(kind)
+    setOutline([])
+    setOutlinePast([])
+    setOutlineFuture([])
+    setContext(null)
+    svg.current?.focus({ preventScroll: true })
+  }
   function undo() {
+    if (tool.endsWith('outline')) {
+      if (outlinePast.length) {
+        setOutlineFuture((f) => [outline, ...f])
+        setOutline(outlinePast[outlinePast.length - 1])
+        setOutlinePast((p) => p.slice(0, -1))
+      }
+      return
+    }
+    if (rowPreview.current) {
+      const before = rowPreview.current
+      rowPreview.current = null
+      setFuture((f) => [layout, ...f])
+      setLayout(before)
+      return
+    }
     if (!past.length) return
     setFuture((f) => [layout, ...f])
     setLayout(past[past.length - 1])
@@ -178,6 +263,14 @@ export function HallEditor({
     setDirty(true)
   }
   function redo() {
+    if (tool.endsWith('outline')) {
+      if (outlineFuture.length) {
+        setOutlinePast((p) => [...p, outline])
+        setOutline(outlineFuture[0])
+        setOutlineFuture((p) => p.slice(1))
+      }
+      return
+    }
     if (!future.length) return
     setPast((p) => [...p, layout])
     setLayout(future[0])
@@ -196,13 +289,48 @@ export function HallEditor({
   }
   function keyboard(e: React.KeyboardEvent) {
     if ((e.target as HTMLElement).closest('input, textarea, select')) return
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    const command = e.ctrlKey || e.metaKey
+    if (command && (e.code === 'KeyZ' || e.key.toLowerCase() === 'z')) {
       e.preventDefault()
       e.shiftKey ? redo() : undo()
+      return
     }
-    if (['Delete', 'Backspace'].includes(e.key) && selected.length) {
+    if (command && e.code === 'KeyY') {
       e.preventDefault()
-      remove()
+      redo()
+      return
+    }
+    if (command && e.code === 'KeyC') {
+      e.preventDefault()
+      copy()
+      return
+    }
+    if (command && e.code === 'KeyX') {
+      e.preventDefault()
+      cut()
+      return
+    }
+    if (command && e.code === 'KeyV') {
+      e.preventDefault()
+      paste()
+      return
+    }
+    if (command && e.code === 'KeyD') {
+      e.preventDefault()
+      duplicateSelection()
+      return
+    }
+    if (command && e.code === 'KeyA') {
+      e.preventDefault()
+      const all = selectionOnLevel(layout, level)
+      setSelected(all.seats)
+      setSelectedObjects(all.objects)
+      setStageActive(false)
+      return
+    }
+    if (['Delete', 'Backspace'].includes(e.key) && hasSelection && !tool.endsWith('outline')) {
+      e.preventDefault()
+      removeSelection()
     }
     if (e.key === 'Escape') {
       setSelected([])
@@ -210,8 +338,114 @@ export function HallEditor({
       setStageActive(false)
       setOutline([])
       setTool('select')
+      setContext(null)
     }
     if (e.key === 'Enter' && outline.length >= 3) finishOutline()
+  }
+  function copy() {
+    if (hasSelection) setClipboard(copySelection(layout, selection))
+    setContext(null)
+  }
+  function cut() {
+    if (!hasSelection || stageActive) return
+    setClipboard(copySelection(layout, selection))
+    removeSelection()
+  }
+  function applyPaste(data: EditorClipboard, at?: Point) {
+    const next = pasteSelection(layout, data, level, at)
+    if (next.layout.seats.length > 5000 || (next.layout.objects?.length || 0) > 200) {
+      setMessage('Лимит: 5000 мест и 200 объектов.')
+      return
+    }
+    change(next.layout)
+    setSelected(next.selection.seats)
+    setSelectedObjects(next.selection.objects)
+    setStageActive(false)
+    setContext(null)
+  }
+  function paste() {
+    if (clipboard) applyPaste(clipboard, context?.world)
+  }
+  function duplicateSelection() {
+    if (hasSelection) applyPaste(copySelection(layout, selection))
+  }
+  function removeSelection() {
+    if (!hasSelection || stageActive) return
+    change(deleteSelection(layout, selection))
+    setSelected([])
+    setSelectedObjects([])
+    setContext(null)
+  }
+  function align(direction: Alignment) {
+    if (hasSelection) change(alignLayout(layout, selection, direction))
+    setContext(null)
+  }
+  function front() {
+    if (selectedObjects.length) change(bringToFront(layout, selection))
+    setContext(null)
+  }
+  function openContext(e: React.MouseEvent<SVGSVGElement>) {
+    e.preventDefault()
+    svg.current?.focus({ preventScroll: true })
+    const target = e.target as Element,
+      object = target.closest('[data-object-id]')?.getAttribute('data-object-id'),
+      seat = target.closest('[data-seat-id]')?.getAttribute('data-seat-id')
+    if (object && layout.objects?.some((o) => o.id === object && levelOf(o) === level)) {
+      if (!selectedObjects.includes(object)) {
+        setActiveObject(object)
+        setSelected([])
+        setStageActive(false)
+      }
+    } else if (seat) {
+      if (!selected.includes(seat)) {
+        setSelected([seat])
+        setActiveObject(null)
+        setStageActive(false)
+      }
+    } else if (target.closest('[data-stage=true]') && levelOf(layout.stage) === level) {
+      setStageActive(true)
+      setSelected([])
+      setActiveObject(null)
+    }
+    const p = svg.current!.createSVGPoint()
+    p.x = e.clientX
+    p.y = e.clientY
+    const world = p.matrixTransform(svg.current!.getScreenCTM()!.inverse())
+    setContext({
+      x: Math.max(8, Math.min(e.clientX, window.innerWidth - 232)),
+      y: Math.max(8, Math.min(e.clientY, window.innerHeight - 330)),
+      world: { x: world.x, y: world.y },
+    })
+  }
+  function editShape(stage: boolean, id: string | undefined, fn: (s: Shape) => Shape) {
+    if (stage) change({ ...layout, stage: fn(layout.stage) })
+    else
+      change({
+        ...layout,
+        objects: layout.objects?.map((o) => (o.id === id ? { ...o, ...fn(o) } : o)),
+      })
+  }
+  function addVertex(stage: boolean, id: string | undefined, index: number) {
+    editShape(stage, id, (s) => {
+      if (!s.points || s.points.length >= 64) return s
+      const a = s.points[index],
+        b = s.points[(index + 1) % s.points.length]
+      return {
+        ...s,
+        points: [
+          ...s.points.slice(0, index + 1),
+          { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+          ...s.points.slice(index + 1),
+        ],
+      }
+    })
+  }
+  function removeVertex(stage: boolean, id: string | undefined, index: number) {
+    editShape(stage, id, (s) =>
+      s.points && s.points.length > 3
+        ? { ...s, points: s.points.filter((_, i) => i !== index) }
+        : s,
+    )
   }
   function addBlock() {
     const width = (columns - 1) * 34
@@ -290,10 +524,19 @@ export function HallEditor({
     setOutline([])
     setTool('select')
   }
-  function start(e: PointerEvent, id?: string, stage = false, objectId?: string, vertex?: number) {
+  function start(
+    e: PointerEvent,
+    id?: string,
+    stage = false,
+    objectId?: string,
+    vertex?: number,
+    resize?: ResizeHandle,
+    decoration?: 'icon' | 'label',
+  ) {
     if (e.button !== 0) return
     e.stopPropagation()
     svg.current?.focus({ preventScroll: true })
+    setContext(null)
     const p = point(e)
     if (tool.endsWith('outline')) {
       if (outline.length >= 64) {
@@ -308,11 +551,24 @@ export function HallEditor({
           ? Math.round(Math.max(0, Math.min(layout.height, p.y)) / 5) * 5
           : Math.max(0, Math.min(layout.height, p.y)),
       }
-      if (!outline.some((q) => q.x === next.x && q.y === next.y)) setOutline([...outline, next])
+      if (!outline.some((q) => q.x === next.x && q.y === next.y)) {
+        setOutlinePast((p) => [...p, outline])
+        setOutlineFuture([])
+        setOutline([...outline, next])
+      }
       return
     }
     setStageActive(stage)
-    setActiveObject(objectId || null)
+    const objectIds = objectId
+      ? e.shiftKey && !resize && vertex === undefined && !decoration
+        ? selectedObjects.includes(objectId)
+          ? selectedObjects.filter((id) => id !== objectId)
+          : [...selectedObjects, objectId]
+        : selectedObjects.includes(objectId)
+          ? selectedObjects
+          : [objectId]
+      : []
+    setSelectedObjects(objectIds)
     if (stage || objectId) setSelected([])
     if (tool === 'seat' && !id && !stage && !objectId) {
       const x = snap ? Math.round(p.x / 10) * 10 : p.x,
@@ -364,6 +620,9 @@ export function HallEditor({
       moving: false,
       objectId,
       vertex,
+      resize,
+      decoration,
+      objectIds,
     }
     svg.current!.setPointerCapture(e.pointerId)
   }
@@ -392,21 +651,60 @@ export function HallEditor({
     } else if (g.stage || g.objectId) {
       const s = g.stage ? g.before.stage : g.before.objects!.find((o) => o.id === g.objectId)!
       let next
-      if (g.vertex !== undefined) {
-        const angle = (-(s.rotation || 0) * Math.PI) / 180
-        const ox = p.x - s.x - s.width / 2,
-          oy = p.y - s.y - s.height / 2
-        const local = {
-          x: Math.max(
-            0,
-            Math.min(1, (ox * Math.cos(angle) - oy * Math.sin(angle)) / s.width + 0.5),
-          ),
-          y: Math.max(
-            0,
-            Math.min(1, (ox * Math.sin(angle) + oy * Math.cos(angle)) / s.height + 0.5),
-          ),
+      if (g.decoration) {
+        const local = localPoint(s, p),
+          position = {
+            x: Math.max(0, Math.min(1, local.x / s.width)),
+            y: Math.max(0, Math.min(1, local.y / s.height)),
+          }
+        next = {
+          ...s,
+          appearance: {
+            ...appearanceOf(s),
+            [g.decoration === 'icon' ? 'icon_position' : 'label_position']: position,
+          },
         }
-        next = { ...s, points: s.points!.map((v, i) => (i === g.vertex ? local : v)) }
+      } else if (g.resize) {
+        next = resizeShape(
+          s,
+          g.resize,
+          { x: g.x, y: g.y },
+          { x: g.x + dx, y: g.y + dy },
+          e.shiftKey,
+          g.stage ? 60 : 10,
+          g.stage ? 30 : 10,
+        )
+        if (!withinCanvas(next, layout.width, layout.height) || next.x < 0 || next.y < 0) return
+      } else if (g.vertex !== undefined) {
+        next = moveVertex(
+          s,
+          g.vertex,
+          {
+            x: Math.max(0, Math.min(layout.width, snap ? Math.round(p.x / 5) * 5 : p.x)),
+            y: Math.max(0, Math.min(layout.height, snap ? Math.round(p.y / 5) * 5 : p.y)),
+          },
+          g.stage ? 60 : 10,
+          g.stage ? 30 : 10,
+        )
+        if (!withinCanvas(next, layout.width, layout.height) || next.x < 0 || next.y < 0) return
+      } else if (g.objectIds && g.objectIds.length > 1) {
+        const moving = g.before.objects!.filter((o) => g.objectIds!.includes(o.id)),
+          bounds = moving.map(shapeBounds),
+          boundedX = Math.max(
+            -Math.min(...bounds.map((b) => b.left)),
+            Math.min(dx, layout.width - Math.max(...bounds.map((b) => b.right))),
+          ),
+          boundedY = Math.max(
+            -Math.min(...bounds.map((b) => b.top)),
+            Math.min(dy, layout.height - Math.max(...bounds.map((b) => b.bottom))),
+          )
+        setLayout({
+          ...g.before,
+          objects: g.before.objects!.map((o) =>
+            g.objectIds!.includes(o.id) ? { ...o, x: o.x + boundedX, y: o.y + boundedY } : o,
+          ),
+        })
+        return
       } else
         next = {
           ...s,
@@ -445,6 +743,18 @@ export function HallEditor({
         h: Math.abs(p.y - g.y),
       }
       setBox(next)
+      setSelectedObjects(
+        (layout.objects || [])
+          .filter(
+            (o) =>
+              levelOf(o) === level &&
+              o.x + o.width / 2 >= next.x &&
+              o.x + o.width / 2 <= next.x + next.w &&
+              o.y + o.height / 2 >= next.y &&
+              o.y + o.height / 2 <= next.y + next.h,
+          )
+          .map((o) => o.id),
+      )
       setSelected(
         visibleSeats
           .filter(
@@ -457,7 +767,11 @@ export function HallEditor({
   }
   function finish() {
     const g = gesture.current
-    if (g?.moving && (g.stage || g.objectId || g.ids.length)) {
+    if (
+      g?.moving &&
+      (g.stage || g.objectId || g.ids.length) &&
+      JSON.stringify(g.before) !== JSON.stringify(layout)
+    ) {
       setPast((p) => [...p.slice(-49), g.before])
       setFuture([])
       setDirty(true)
@@ -484,19 +798,6 @@ export function HallEditor({
     } finally {
       setBusy(false)
     }
-  }
-  function duplicate() {
-    const copies = layout.seats
-      .filter((s) => selected.includes(s.id))
-      .map((s) => ({
-        ...s,
-        id: newId(),
-        x: s.x + 34,
-        y: s.y + 42,
-        row: `${s.row}к${layout.seats.length}`,
-      }))
-    change({ ...layout, seats: [...layout.seats, ...copies] })
-    setSelected(copies.map((s) => s.id))
   }
   function mirrorSeats(axis: 'x' | 'y') {
     const seats = layout.seats.filter((s) => selected.includes(s.id))
@@ -666,6 +967,79 @@ export function HallEditor({
       {message && (
         <div className="notice" role="status">
           {message}
+        </div>
+      )}
+      {context && (
+        <div
+          className="editor-context-menu"
+          role="menu"
+          aria-label="Действия на плане"
+          style={{ left: context.x, top: context.y }}
+        >
+          {[
+            {
+              name: 'Скопировать',
+              icon: Copy,
+              key: '⌘/Ctrl C',
+              disabled: !hasSelection,
+              action: copy,
+            },
+            {
+              name: 'Вырезать',
+              icon: Scissors,
+              key: '⌘/Ctrl X',
+              disabled: !hasSelection || stageActive,
+              action: cut,
+            },
+            {
+              name: 'Вставить',
+              icon: ClipboardPaste,
+              key: '⌘/Ctrl V',
+              disabled: !clipboard,
+              action: paste,
+            },
+            {
+              name: 'Дублировать',
+              icon: Copy,
+              key: '⌘/Ctrl D',
+              disabled: !hasSelection,
+              action: duplicateSelection,
+            },
+            {
+              name: 'По центру горизонтально',
+              icon: AlignCenter,
+              key: '',
+              disabled: !hasSelection,
+              action: () => align('center-x'),
+            },
+            {
+              name: 'По центру вертикально',
+              icon: AlignVerticalJustifyCenter,
+              key: '',
+              disabled: !hasSelection,
+              action: () => align('center-y'),
+            },
+            {
+              name: 'На передний план',
+              icon: MoveUp,
+              key: '',
+              disabled: !selectedObjects.length,
+              action: front,
+            },
+            {
+              name: 'Удалить',
+              icon: Trash2,
+              key: 'Delete',
+              disabled: !hasSelection || stageActive,
+              action: removeSelection,
+            },
+          ].map((a) => (
+            <button key={a.name} role="menuitem" disabled={a.disabled} onClick={a.action}>
+              <a.icon size={16} />
+              <span>{a.name}</span>
+              <small>{a.key}</small>
+            </button>
+          ))}
         </div>
       )}
       <div className="editor-grid">
@@ -910,7 +1284,7 @@ export function HallEditor({
             <p>2. Выберите объект — настройки справа.</p>
             <p>3. Номер ряда выделяет ряд. Потяните ручку, чтобы его изогнуть.</p>
             <p>
-              Shift + клик — несколько мест.
+              Shift + клик — несколько мест или объектов.
               <br />
               Delete — удалить места.
               <br />
@@ -949,7 +1323,7 @@ export function HallEditor({
               className="icon-button"
               aria-label="Отменить действие"
               title="Отменить действие"
-              disabled={!past.length}
+              disabled={tool.endsWith('outline') ? !outlinePast.length : !past.length}
               onClick={undo}
             >
               <Undo2 size={18} />
@@ -958,7 +1332,7 @@ export function HallEditor({
               className="icon-button"
               aria-label="Повторить действие"
               title="Повторить действие"
-              disabled={!future.length}
+              disabled={tool.endsWith('outline') ? !outlineFuture.length : !future.length}
               onClick={redo}
             >
               <Redo2 size={18} />
@@ -1045,6 +1419,7 @@ export function HallEditor({
               onPointerMove={move}
               onPointerUp={finish}
               onPointerCancel={finish}
+              onContextMenu={openContext}
               aria-label="Редактор схемы зала"
             >
               <defs>
@@ -1061,9 +1436,15 @@ export function HallEditor({
                     key={o.id}
                     shape={o}
                     color={o.color}
-                    active={activeObject === o.id}
+                    active={selectedObjects.includes(o.id)}
                     onPointerDown={(e) => start(e, undefined, false, o.id)}
                     onVertex={(e, index) => start(e, undefined, false, o.id, index)}
+                    onResize={(e, h) => start(e, undefined, false, o.id, undefined, h)}
+                    onDecoration={(e, target) =>
+                      start(e, undefined, false, o.id, undefined, undefined, target)
+                    }
+                    onAddVertex={(index) => addVertex(false, o.id, index)}
+                    onRemoveVertex={(index) => removeVertex(false, o.id, index)}
                   />
                 ))}
               <g opacity={levelOf(layout.stage) === level ? 1 : 0.25}>
@@ -1074,6 +1455,12 @@ export function HallEditor({
                     levelOf(layout.stage) === level ? (e) => start(e, undefined, true) : undefined
                   }
                   onVertex={(e, index) => start(e, undefined, true, undefined, index)}
+                  onResize={(e, h) => start(e, undefined, true, undefined, undefined, h)}
+                  onDecoration={(e, target) =>
+                    start(e, undefined, true, undefined, undefined, undefined, target)
+                  }
+                  onAddVertex={(index) => addVertex(true, undefined, index)}
+                  onRemoveVertex={(index) => removeVertex(true, undefined, index)}
                 />
               </g>
               {(layout.objects || [])
@@ -1083,14 +1470,21 @@ export function HallEditor({
                     key={o.id}
                     shape={o}
                     color={o.color}
-                    active={activeObject === o.id}
+                    active={selectedObjects.includes(o.id)}
                     onPointerDown={(e) => start(e, undefined, false, o.id)}
                     onVertex={(e, index) => start(e, undefined, false, o.id, index)}
+                    onResize={(e, h) => start(e, undefined, false, o.id, undefined, h)}
+                    onDecoration={(e, target) =>
+                      start(e, undefined, false, o.id, undefined, undefined, target)
+                    }
+                    onAddVertex={(index) => addVertex(false, o.id, index)}
+                    onRemoveVertex={(index) => removeVertex(false, o.id, index)}
                   />
                 ))}
               {visibleSeats.map((s) => (
                 <g
                   key={s.id}
+                  data-seat-id={s.id}
                   onPointerDown={(e) => start(e, s.id)}
                   className="draggable"
                   role="button"
@@ -1268,6 +1662,55 @@ export function HallEditor({
         </div>
         <aside className="editor-panel inspector" aria-label="Свойства выбранного элемента">
           <div className="eyebrow">СВОЙСТВА</div>
+          {hasSelection && (
+            <ToolSection title="Выравнивание" open>
+              <p className="tool-hint">
+                {selected.length + selectedObjects.length + (stageActive ? 1 : 0) > 1
+                  ? 'Элементы выравниваются относительно выделения.'
+                  : 'Элемент выравнивается относительно всего плана.'}
+              </p>
+              <div className="alignment-grid">
+                {(
+                  [
+                    { id: 'left', name: 'Левый край', icon: '⇤' },
+                    { id: 'center-x', name: 'Центр по горизонтали', icon: '↔' },
+                    { id: 'right', name: 'Правый край', icon: '⇥' },
+                    { id: 'top', name: 'Верхний край', icon: '↥' },
+                    { id: 'center-y', name: 'Центр по вертикали', icon: '↕' },
+                    { id: 'bottom', name: 'Нижний край', icon: '↧' },
+                  ] as const
+                ).map((a) => (
+                  <button
+                    key={a.id}
+                    className="button secondary small"
+                    title={a.name}
+                    aria-label={a.name}
+                    onClick={() => align(a.id)}
+                  >
+                    {a.icon}
+                  </button>
+                ))}
+              </div>
+            </ToolSection>
+          )}
+          {selectedObjects.length > 1 && (
+            <>
+              <h3>Объекты · {selectedObjects.length}</h3>
+              <p className="tool-hint">
+                Shift + клик добавляет объект к выделению. Перетаскивайте группу или используйте
+                выравнивание.
+              </p>
+              <button className="button secondary full" onClick={duplicateSelection}>
+                <Copy size={16} />
+                Дублировать выделение
+              </button>
+              <button className="button danger full" onClick={removeSelection}>
+                <Trash2 size={16} />
+                Удалить выделение
+              </button>
+            </>
+          )}
+
           {selected.length > 0 && (
             <>
               <h3>Места · {selected.length}</h3>
@@ -1411,7 +1854,7 @@ export function HallEditor({
                   </button>
                 </div>
               </ToolSection>
-              <button className="button secondary full" onClick={duplicate}>
+              <button className="button secondary full" onClick={duplicateSelection}>
                 <Copy size={16} />
                 Дублировать
               </button>
@@ -1428,8 +1871,7 @@ export function HallEditor({
               label="Сцена"
               onChange={(stage) => change({ ...layout, stage })}
               onDraw={() => {
-                setTool('stage-outline')
-                setOutline([])
+                beginOutline('stage-outline')
               }}
             />
           )}
@@ -1447,8 +1889,7 @@ export function HallEditor({
                       })
                     }
                     onDraw={() => {
-                      setTool('object-outline')
-                      setOutline([])
+                      beginOutline('object-outline')
                     }}
                     onDelete={() => {
                       change({
@@ -1457,22 +1898,7 @@ export function HallEditor({
                       })
                       setActiveObject(null)
                     }}
-                    onCopy={() => {
-                      const id = newId()
-                      change({
-                        ...layout,
-                        objects: [
-                          ...(layout.objects || []),
-                          {
-                            ...object,
-                            id,
-                            x: object.x + object.width + 30,
-                            label: object.label + ' · копия',
-                          },
-                        ],
-                      })
-                      setActiveObject(id)
-                    }}
+                    onCopy={duplicateSelection}
                   />
                   {object.kind === 'table' && (
                     <button
@@ -1485,7 +1911,7 @@ export function HallEditor({
                 </>
               ) : null
             })()}
-          {!selected.length && !stageActive && !activeObject && <EmptyInspector />}
+          {!hasSelection && <EmptyInspector />}
         </aside>
       </div>
     </div>

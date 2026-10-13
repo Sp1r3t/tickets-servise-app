@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Layers, Plus, Copy, Trash2, MousePointer2 } from 'lucide-react'
 import { levelOf, levelsOf, newId, type HallObject, type Layout, type Shape } from '../types'
 import { objectNames, shapePresets, variants, withForm, withVariant } from '../editorShapes'
+import { appearanceOf } from '../editorGeometry'
 import { ObjectSymbol, ShapeGlyph } from './HallGeometry'
 
 export function ToolSection({
@@ -253,6 +254,147 @@ export function RowTools({
     </ToolSection>
   )
 }
+function AppearanceTools({ shape, onChange }: { shape: Shape; onChange: (s: Shape) => void }) {
+  const style = appearanceOf(shape),
+    patch = (value: Partial<typeof style>) =>
+      onChange({ ...shape, appearance: { ...style, ...value } })
+  return (
+    <>
+      <ToolSection title="Штриховка и детали">
+        <label>
+          Заливка узором
+          <select
+            value={style.pattern}
+            onChange={(e) => patch({ pattern: e.target.value as typeof style.pattern })}
+          >
+            {Object.entries({
+              auto: 'По типу объекта',
+              none: 'Без штриховки',
+              diagonal: 'Диагональная',
+              cross: 'Перекрёстная',
+              dots: 'Точки',
+              horizontal: 'Горизонтальная',
+              vertical: 'Вертикальная',
+            }).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Цвет штриховки
+          <input
+            type="color"
+            value={style.pattern_color}
+            onChange={(e) => patch({ pattern_color: e.target.value })}
+          />
+        </label>
+        <div className="form-grid">
+          {(['pattern_spacing', 'pattern_angle', 'pattern_width'] as const).map((k) => (
+            <label key={k}>
+              {
+                {
+                  pattern_spacing: 'Шаг штриховки',
+                  pattern_angle: 'Угол штриховки',
+                  pattern_width: 'Толщина штриховки',
+                }[k]
+              }
+              <input
+                type="number"
+                value={style[k]}
+                min={k === 'pattern_angle' ? -180 : k === 'pattern_width' ? 0.25 : 4}
+                max={k === 'pattern_angle' ? 180 : k === 'pattern_width' ? 5 : 80}
+                step={k === 'pattern_width' ? 0.25 : 1}
+                onChange={(e) => patch({ [k]: Number(e.target.value) })}
+              />
+            </label>
+          ))}
+        </div>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={style.details_visible}
+            onChange={(e) => patch({ details_visible: e.target.checked })}
+          />
+          Детали объекта
+        </label>
+      </ToolSection>
+      <ToolSection title="Подпись и значок">
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={style.label_visible}
+            onChange={(e) => patch({ label_visible: e.target.checked })}
+          />
+          Показать подпись
+        </label>
+        {'kind' in shape && (
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={style.icon_visible}
+              onChange={(e) => patch({ icon_visible: e.target.checked })}
+            />
+            Показать значок
+          </label>
+        )}
+        <div className="form-grid">
+          <label>
+            Цвет подписи
+            <input
+              type="color"
+              value={style.label_color}
+              onChange={(e) => patch({ label_color: e.target.value })}
+            />
+          </label>
+          <label>
+            Размер подписи
+            <input
+              type="number"
+              min={6}
+              max={40}
+              value={style.label_size}
+              onChange={(e) => patch({ label_size: Number(e.target.value) })}
+            />
+          </label>
+        </div>
+        <p className="tool-hint">
+          Значок и подпись можно перетаскивать прямо внутри выбранного объекта. Белая подложка
+          сохраняет читаемость.
+        </p>
+        <button
+          className="button secondary full"
+          onClick={() => patch({ label_position: null, icon_position: null })}
+        >
+          Разместить автоматически
+        </button>
+      </ToolSection>
+      <ToolSection title="Линия контура">
+        <label>
+          Цвет контура
+          <input
+            type="color"
+            value={style.outline_color}
+            onChange={(e) => patch({ outline_color: e.target.value })}
+          />
+        </label>
+        <label>
+          Толщина контура
+          <input
+            type="number"
+            min={0}
+            max={6}
+            step={0.5}
+            value={style.outline_width}
+            onChange={(e) => patch({ outline_width: Number(e.target.value) })}
+          />
+        </label>
+      </ToolSection>
+    </>
+  )
+}
+
 export function ShapeInspector({
   shape,
   onChange,
@@ -307,7 +449,8 @@ export function ShapeInspector({
         </button>
         {shape.shape === 'polygon' && (
           <p className="tool-hint">
-            Белые точки на плане — вершины. Перетаскивайте их, чтобы менять контур.
+            Белые точки — узлы. Тяните их, чтобы менять контур; пунктирная точка добавляет узел,
+            двойной клик удаляет.
           </p>
         )}
       </ToolSection>
@@ -340,6 +483,7 @@ export function ShapeInspector({
           ))}
         </div>
       </ToolSection>
+      <AppearanceTools shape={shape} onChange={onChange} />
     </>
   )
 }
@@ -356,15 +500,15 @@ export function ObjectTools({
 }) {
   function add(kind: HallObject['kind']) {
     const id = newId(),
-      small = ['column', 'table'].includes(kind)
+      small = ['column', 'table', 'plant'].includes(kind)
     let o: HallObject = {
       id,
       kind,
       label: objectNames[kind],
       x: 80,
       y: kind === 'table' ? 240 : 40,
-      width: small ? 60 : 160,
-      height: small ? 60 : 100,
+      width: small ? 60 : kind === 'sofa' ? 180 : kind === 'fence' ? 220 : 160,
+      height: small ? 60 : kind === 'bench' || kind === 'fence' ? 55 : 100,
       shape: small ? 'ellipse' : 'rect',
       level_id: level,
       color:
@@ -377,7 +521,18 @@ export function ObjectTools({
               : kind === 'zone'
                 ? '#eef0fc'
                 : '#dce3ef',
-      blocks_seats: ['column', 'stairs', 'bar', 'technical', 'table'].includes(kind),
+      blocks_seats: [
+        'column',
+        'stairs',
+        'bar',
+        'technical',
+        'table',
+        'sofa',
+        'bench',
+        'fence',
+        'sound',
+        'plant',
+      ].includes(kind),
     }
     // Keep new objects away from existing seating; reserve space for a table's chairs.
     const padding = kind === 'table' ? 70 : 14
@@ -423,19 +578,33 @@ export function ObjectTools({
       <p className="tool-hint">
         Добавьте объект, затем выберите его на плане. Варианты и параметры появятся справа.
       </p>
-      <div className="object-palette">
-        {Object.entries(objectNames).map(([kind, name]) => (
-          <button
-            key={kind}
-            disabled={(layout.objects?.length || 0) >= 200}
-            onClick={() => add(kind as HallObject['kind'])}
-            aria-label={`Добавить: ${name}`}
-          >
-            <ObjectSymbol kind={kind as HallObject['kind']} />
-            <span>{name}</span>
-          </button>
-        ))}
-      </div>
+      {(
+        [
+          { name: 'Зоны и мебель', kinds: ['zone', 'table', 'sofa', 'bench'] },
+          { name: 'Навигация', kinds: ['entrance', 'exit', 'stairs', 'lift', 'wc', 'cloakroom'] },
+          {
+            name: 'Инфраструктура',
+            kinds: ['bar', 'column', 'technical', 'sound', 'light', 'fence', 'plant', 'decoration'],
+          },
+        ] as { name: string; kinds: HallObject['kind'][] }[]
+      ).map((group) => (
+        <div key={group.name}>
+          <div className="object-group-title">{group.name}</div>
+          <div className="object-palette">
+            {group.kinds.map((kind) => (
+              <button
+                key={kind}
+                disabled={(layout.objects?.length || 0) >= 200}
+                onClick={() => add(kind)}
+                aria-label={`Добавить: ${objectNames[kind]}`}
+              >
+                <ObjectSymbol kind={kind} />
+                <span>{objectNames[kind]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
       <ToolSection title="Объекты на уровне">
         <div className="object-list">
           {layout.objects

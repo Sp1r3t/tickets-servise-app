@@ -119,6 +119,16 @@ export const objectNames: Record<HallObject['kind'], string> = {
   entrance: 'Вход',
   technical: 'Техническая зона',
   decoration: 'Свободный объект',
+  sofa: 'Диван',
+  bench: 'Скамья',
+  exit: 'Выход',
+  wc: 'Туалет',
+  cloakroom: 'Гардероб',
+  lift: 'Лифт',
+  sound: 'Звук / пульт',
+  light: 'Освещение',
+  fence: 'Ограждение',
+  plant: 'Растение',
 }
 export const variants: Partial<
   Record<
@@ -126,6 +136,15 @@ export const variants: Partial<
     { id: NonNullable<HallObject['variant']>; name: string; form: string }[]
   >
 > = {
+  sofa: [
+    { id: 'straight', name: 'Прямой диван', form: 'rect' },
+    { id: 'corner', name: 'Угловой диван', form: 'l' },
+    { id: 'double', name: 'Модульный диван', form: 'u' },
+  ],
+  bench: [
+    { id: 'straight', name: 'Прямая скамья', form: 'rect' },
+    { id: 'corner', name: 'Угловая скамья', form: 'l' },
+  ],
   stairs: [
     { id: 'straight', name: 'Прямая', form: 'rect' },
     { id: 'corner', name: 'С поворотом', form: 'l' },
@@ -166,6 +185,8 @@ export function withVariant(s: HallObject, id: NonNullable<HallObject['variant']
     const size = Math.min(s.width, s.height)
     next.width = s.kind === 'table' && id === 'long' ? size * 1.8 : size
     next.height = size
+    next.x += (s.width - next.width) / 2
+    next.y += (s.height - next.height) / 2
   }
   return next
 }

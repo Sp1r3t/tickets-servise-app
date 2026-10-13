@@ -34,6 +34,23 @@ class Point(StrictModel):
     y: float = Field(ge=0, le=1, allow_inf_nan=False)
 
 
+class Appearance(StrictModel):
+    pattern: Literal["auto", "none", "diagonal", "cross", "dots", "horizontal", "vertical"] = "auto"
+    pattern_color: str = Field(default="#94a0b4", pattern=r"^#[0-9a-fA-F]{6}$")
+    pattern_spacing: float = Field(default=12, ge=4, le=80, allow_inf_nan=False)
+    pattern_angle: float = Field(default=45, ge=-180, le=180, allow_inf_nan=False)
+    pattern_width: float = Field(default=1, ge=0.25, le=5, allow_inf_nan=False)
+    outline_color: str = Field(default="#bac3d4", pattern=r"^#[0-9a-fA-F]{6}$")
+    outline_width: float = Field(default=1, ge=0, le=6, allow_inf_nan=False)
+    label_color: str = Field(default="#566074", pattern=r"^#[0-9a-fA-F]{6}$")
+    label_size: float = Field(default=12, ge=6, le=40, allow_inf_nan=False)
+    label_visible: bool = True
+    icon_visible: bool = True
+    details_visible: bool = True
+    label_position: Point | None = None
+    icon_position: Point | None = None
+
+
 class Shape(StrictModel):
     x: float = Field(ge=0, le=2000, allow_inf_nan=False)
     y: float = Field(ge=0, le=1500, allow_inf_nan=False)
@@ -44,6 +61,7 @@ class Shape(StrictModel):
     points: list[Point] = Field(default_factory=list, max_length=64)
     rotation: float = Field(default=0, ge=-360, le=360, allow_inf_nan=False)
     level_id: str = "ground"
+    appearance: Appearance | None = None
 
     @model_validator(mode="after")
     def contour(self):
@@ -66,7 +84,26 @@ class Stage(Shape):
 
 class HallObject(Shape):
     id: str = Field(min_length=1, max_length=80)
-    kind: Literal["zone", "table", "bar", "column", "stairs", "entrance", "technical", "decoration"] = "zone"
+    kind: Literal[
+        "zone",
+        "table",
+        "bar",
+        "column",
+        "stairs",
+        "entrance",
+        "technical",
+        "decoration",
+        "sofa",
+        "bench",
+        "exit",
+        "wc",
+        "cloakroom",
+        "lift",
+        "sound",
+        "light",
+        "fence",
+        "plant",
+    ] = "zone"
     color: str = Field(default="#dce3ef", pattern=r"^#[0-9a-fA-F]{6}$")
     blocks_seats: bool = False
     variant: Literal[
